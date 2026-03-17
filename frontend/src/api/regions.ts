@@ -1,0 +1,43 @@
+import { apiFetch } from "./http";
+
+export type RegionOut = { id: string; name: string };
+export type CountryOut = { id: string; region_id: string; name: string };
+export type ApplicationModelOut = { id: string; country_id: string; name: string };
+export type CompanyOut = { id: string; name: string; region_id: string; country_id?: string | null };
+
+export async function listRegions(): Promise<RegionOut[]> {
+  return apiFetch<RegionOut[]>("/regions");
+}
+
+export async function listCountriesByRegion(regionId: string): Promise<CountryOut[]> {
+  return apiFetch<CountryOut[]>(`/regions/${regionId}/countries`);
+}
+
+export async function listModelsByCountry(countryId: string): Promise<ApplicationModelOut[]> {
+  return apiFetch<ApplicationModelOut[]>(`/countries/${countryId}/models`);
+}
+
+export async function listCompanies(regionId?: string): Promise<CompanyOut[]> {
+  const qs = regionId ? `?region_id=${encodeURIComponent(regionId)}` : "";
+  return apiFetch<CompanyOut[]>(`/companies${qs}`);
+}
+
+export type ModelOut = {
+  id: string;
+  country_id: string;
+  name: string;
+  country_name: string;
+  region_name: string;
+};
+
+export async function listAllModels(): Promise<ModelOut[]> {
+  return apiFetch<ModelOut[]>("/models");
+}
+
+export async function createModel(countryId: string, name: string): Promise<ModelOut> {
+  return apiFetch<ModelOut>("/models", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ country_id: countryId, name: name.trim() }),
+  });
+}
