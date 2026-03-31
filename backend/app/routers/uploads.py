@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from xlrd.biffh import XLRDError
 
 from ..db import get_db
+from .auth import UserOut, effective_company_id, get_current_user
 
 logger = logging.getLogger(__name__)
 from ..schemas import UploadOut
@@ -23,9 +24,29 @@ _BAD_EXCEL_MSG = (
 )
 
 
+def _assert_model_in_company(db: Any, model_id: str | None, company_id: str) -> None:
+    if not model_id:
+        return
+    import sqlite3
+
+    if isinstance(db, sqlite3.Connection):
+        cur = db.execute("select company_id from models where id = ?", (model_id,))
+        row = cur.fetchone()
+    else:
+        with db.cursor() as cur:
+            cur.execute("select company_id from public.models where id = %(id)s", {"id": model_id})
+            row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Model not found")
+    mid_cid = str(row["company_id"])
+    if mid_cid != company_id:
+        raise HTTPException(status_code=403, detail="Model is not in your company")
+
+
 @router.post("/preview")
 async def preview_upload(
     db: Annotated[Any, Depends(get_db)],
+    user: Annotated[UserOut, Depends(get_current_user)],
     file: Annotated[UploadFile, File()],
     model_id: Annotated[str | None, Form()] = None,
 ):
@@ -35,6 +56,9 @@ async def preview_upload(
     """
     if not file.filename:
         raise HTTPException(status_code=400, detail="Missing filename")
+
+    if not user.is_admin:
+        _assert_model_in_company(db, model_id, user.company_id)
 
     data = await file.read()
     try:
@@ -94,6 +118,7 @@ async def preview_upload(
 @router.get("", response_model=list[UploadOut])
 def get_uploads(
     db: Annotated[Any, Depends(get_db)],
+    user: Annotated[UserOut, Depends(get_current_user)],
     report_key: str | None = Query(default=None),
     latestOnly: bool = Query(default=False),
     region_id: str | None = Query(default=None),
@@ -103,6 +128,7 @@ def get_uploads(
     report_year: int | None = Query(default=None),
     report_month: int | None = Query(default=None),
 ):
+    cid = effective_company_id(user, company_id)
     return list_uploads(
         db,
         report_key=report_key,
@@ -110,7 +136,7 @@ def get_uploads(
         region_id=region_id,
         country_id=country_id,
         model_id=model_id,
-        company_id=company_id,
+        company_id=cid,
         report_year=report_year,
         report_month=report_month,
     )
@@ -119,6 +145,7 @@ def get_uploads(
 @router.post("", response_model=UploadOut)
 async def create_upload(
     db: Annotated[Any, Depends(get_db)],
+    user: Annotated[UserOut, Depends(get_current_user)],
     file: Annotated[UploadFile, File()],
     report_key: Annotated[str, Form()],
     notes: Annotated[str | None, Form()] = None,
@@ -139,6 +166,12 @@ async def create_upload(
     """
     if not file.filename:
         raise HTTPException(status_code=400, detail="Missing filename")
+
+    effective_company = effective_company_id(user, company_id) or user.company_id
+    if not effective_company:
+        raise HTTPException(status_code=400, detail="Company is required for this upload")
+    if model_id and not user.is_admin:
+        _assert_model_in_company(db, model_id, user.company_id)
 
     data = await file.read()
     nodes: list[dict] = []
@@ -252,7 +285,7 @@ async def create_upload(
             region_id=region_id,
             country_id=country_id,
             model_id=model_id,
-            company_id=company_id,
+            company_id=effective_company,
             report_year=report_year,
             report_month=report_month,
             applicable_region_ids=applicable_region_ids,

@@ -34,6 +34,7 @@ function defaultTitleForPath(path: string) {
   if (path === "/upload") return "Upload";
   if (path === "/mappings") return "Mappings";
   if (path === "/models") return "Models";
+  if (path === "/settings") return "Settings";
   if (path.startsWith("/uploads/")) return "Report";
   if (path.startsWith("/compare/")) return "Compare";
   return "Tab";
@@ -77,6 +78,18 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     };
     return initial;
   });
+
+  /** Stable callback: avoids infinite loops when consumers put `rename` in useEffect deps. */
+  const rename = React.useCallback((id: string, title: string) => {
+    setState((prev) => {
+      const cur = prev.tabs.find((t) => t.id === id);
+      if (cur?.title === title) return prev;
+      const nextTabs = prev.tabs.map((t) => (t.id === id ? { ...t, title } : t));
+      const next: WorkspaceState = { ...prev, tabs: nextTabs };
+      saveState(next);
+      return next;
+    });
+  }, []);
 
   // Keep URL and active tab in sync
   React.useEffect(() => {
@@ -144,16 +157,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         });
         nav(t.path);
       },
-      rename: (id, title) => {
-        setState((prev) => {
-          const nextTabs = prev.tabs.map((t) => (t.id === id ? { ...t, title } : t));
-          const next: WorkspaceState = { ...prev, tabs: nextTabs };
-          saveState(next);
-          return next;
-        });
-      }
+      rename
     };
-  }, [nav, state, loc.pathname]);
+  }, [nav, state, loc.pathname, rename]);
 
   return <WorkspaceContext.Provider value={api}>{children}</WorkspaceContext.Provider>;
 }

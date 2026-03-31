@@ -1,22 +1,13 @@
 import * as React from "react";
-import {
-  listRegions,
-  listCountriesByRegion,
-  listModelsByCountry,
-  type RegionOut,
-  type CountryOut,
-  type ApplicationModelOut
-} from "../api/regions";
+import { listAllModels, type ModelOut } from "../api/regions";
 import { getUploadTree, listUploads } from "../api/uploads";
-import { Badge } from "../components/Badge";
 import { Card } from "../components/Card";
 import { ReportTreeDiagram } from "../components/ReportTreeDiagram";
 import { Segmented } from "../components/Segmented";
 import { formatValueToSigFigs } from "../lib/format";
 import type { TreeNode, UploadOut } from "../types";
 import { toast } from "sonner";
-import { ChevronDown, ChevronRight, Cpu } from "lucide-react";
-import { cn } from "../lib/cn";
+import { Cpu } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useWorkspace } from "../workspace/tabs";
 import { Button } from "../components/Button";
@@ -28,19 +19,15 @@ export function ModelsPage() {
   const { openOrActivate } = useWorkspace();
   const [tab, setTab] = React.useState<"list" | "compare">("list");
 
-  // When returning from side-by-side view, switch to Compare tab
   React.useEffect(() => {
     const state = location.state as { tab?: string } | null;
     if (state?.tab === "compare") {
       setTab("compare");
     }
   }, [location.state]);
-  const [regions, setRegions] = React.useState<RegionOut[]>([]);
+
+  const [allModels, setAllModels] = React.useState<ModelOut[]>([]);
   const [loading, setLoading] = React.useState(true);
-  const [expandedRegion, setExpandedRegion] = React.useState<string | null>(null);
-  const [expandedCountry, setExpandedCountry] = React.useState<string | null>(null);
-  const [countriesByRegion, setCountriesByRegion] = React.useState<Record<string, CountryOut[]>>({});
-  const [modelsByCountry, setModelsByCountry] = React.useState<Record<string, ApplicationModelOut[]>>({});
 
   const [compareReports, setCompareReports] = React.useState<UploadOut[]>([]);
   const [compareLeftId, setCompareLeftId] = React.useState<string | null>(null);
@@ -52,35 +39,12 @@ export function ModelsPage() {
   const [compareLoading, setCompareLoading] = React.useState(false);
 
   React.useEffect(() => {
-    listRegions()
-      .then((data) => setRegions(Array.isArray(data) ? data : []))
-      .catch(() => setRegions([]))
+    setLoading(true);
+    listAllModels()
+      .then((data) => setAllModels(Array.isArray(data) ? data : []))
+      .catch(() => setAllModels([]))
       .finally(() => setLoading(false));
   }, []);
-
-  React.useEffect(() => {
-    if (!expandedRegion) return;
-    if (countriesByRegion[expandedRegion]) return;
-    listCountriesByRegion(expandedRegion)
-      .then((data) => {
-        setCountriesByRegion((prev) => ({ ...prev, [expandedRegion]: Array.isArray(data) ? data : [] }));
-      })
-      .catch(() => {
-        setCountriesByRegion((prev) => ({ ...prev, [expandedRegion]: [] }));
-      });
-  }, [expandedRegion, countriesByRegion]);
-
-  React.useEffect(() => {
-    if (!expandedCountry) return;
-    if (modelsByCountry[expandedCountry]) return;
-    listModelsByCountry(expandedCountry)
-      .then((data) => {
-        setModelsByCountry((prev) => ({ ...prev, [expandedCountry]: Array.isArray(data) ? data : [] }));
-      })
-      .catch(() => {
-        setModelsByCountry((prev) => ({ ...prev, [expandedCountry]: [] }));
-      });
-  }, [expandedCountry, modelsByCountry]);
 
   React.useEffect(() => {
     if (tab !== "compare") return;
@@ -113,17 +77,10 @@ export function ModelsPage() {
       }
     };
     void load();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [tab, compareLeftId, compareRightId]);
-
-  function toggleRegion(id: string) {
-    setExpandedRegion((prev) => (prev === id ? null : id));
-    if (expandedCountry) setExpandedCountry(null);
-  }
-
-  function toggleCountry(id: string) {
-    setExpandedCountry((prev) => (prev === id ? null : id));
-  }
 
   return (
     <>
@@ -131,7 +88,7 @@ export function ModelsPage() {
         <div>
           <div className="text-sm font-semibold text-slate-100">Application Models</div>
           <div className="mt-1 text-xs text-slate-400">
-            Browse regions, countries, and their models. Compare two models side by side.
+            All regional application models in one list. Compare two uploaded reports side by side on the Compare tab.
           </div>
         </div>
         <Segmented
@@ -263,109 +220,50 @@ export function ModelsPage() {
           </div>
         </Card>
       ) : (
-      <Card
-        title="Models"
-        subtitle={
-          loading
-            ? "Loading…"
-            : `${regions.length} region(s). Click to expand and see countries and models.`
-        }
-      >
-        {loading ? (
-          <div className="py-10 text-center text-sm text-slate-400">Loading regions…</div>
-        ) : regions.length === 0 ? (
-          <div className="py-10 text-center text-sm text-slate-400">
-            No regions found. Run database migrations to seed master data.
-          </div>
-        ) : (
-          <div className="space-y-1">
-            {regions.map((region) => {
-              const isRegionOpen = expandedRegion === region.id;
-              const countries = countriesByRegion[region.id] ?? [];
-              return (
-                <div key={region.id} className="rounded-lg ring-1 ring-white/5">
-                  <button
-                    type="button"
-                    onClick={() => toggleRegion(region.id)}
-                    className={cn(
-                      "flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm transition",
-                      "hover:bg-white/5"
-                    )}
-                  >
-                    {isRegionOpen ? (
-                      <ChevronDown className="h-4 w-4 text-slate-400" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4 text-slate-400" />
-                    )}
-                    <span className="font-medium text-slate-100">{region.name}</span>
-                    <Badge className="text-slate-300">
-                      {isRegionOpen ? `${countries.length} countries` : "Expand"}
-                    </Badge>
-                  </button>
-                  {isRegionOpen && (
-                    <div className="border-t border-white/5 pl-6 pr-3 pb-3 pt-1">
-                      {countries.length === 0 ? (
-                        <div className="py-4 text-center text-xs text-slate-500">Loading countries…</div>
-                      ) : (
-                        <div className="space-y-1">
-                          {countries.map((country) => {
-                            const isCountryOpen = expandedCountry === country.id;
-                            const models = modelsByCountry[country.id] ?? [];
-                            return (
-                              <div key={country.id} className="rounded-lg ring-1 ring-white/5">
-                                <button
-                                  type="button"
-                                  onClick={() => toggleCountry(country.id)}
-                                  className={cn(
-                                    "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition",
-                                    "hover:bg-white/5"
-                                  )}
-                                >
-                                  {isCountryOpen ? (
-                                    <ChevronDown className="h-3.5 w-3.5 text-slate-500" />
-                                  ) : (
-                                    <ChevronRight className="h-3.5 w-3.5 text-slate-500" />
-                                  )}
-                                  <span className="text-slate-200">{country.name}</span>
-                                  <Badge className="bg-sky-500/15 text-sky-200 ring-sky-400/25 text-xs">
-                                    {isCountryOpen ? `${models.length} models` : "Expand"}
-                                  </Badge>
-                                </button>
-                                {isCountryOpen && (
-                                  <div className="border-t border-white/5 pl-6 pr-3 pb-3 pt-2">
-                                    {models.length === 0 ? (
-                                      <div className="py-3 text-center text-xs text-slate-500">
-                                        Loading models…
-                                      </div>
-                                    ) : (
-                                      <div className="flex flex-wrap gap-2">
-                                        {models.map((model) => (
-                                          <div
-                                            key={model.id}
-                                            className="flex items-center gap-2 rounded-xl bg-white/5 px-4 py-2.5 ring-1 ring-white/10"
-                                          >
-                                            <Cpu className="h-4 w-4 text-sky-300" />
-                                            <span className="font-medium text-slate-100">{model.name}</span>
-                                            <span className="text-xs text-slate-500">({model.id.slice(0, 8)}…)</span>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </Card>
+        <Card
+          title="Models"
+          subtitle={
+            loading
+              ? "Loading…"
+              : `${allModels.length} application model(s). Sorted by region, country, and name.`
+          }
+        >
+          {loading ? (
+            <div className="py-10 text-center text-sm text-slate-400">Loading models…</div>
+          ) : allModels.length === 0 ? (
+            <div className="py-10 text-center text-sm text-slate-400">
+              No application models found. Seed regions/countries/models or create models per country.
+            </div>
+          ) : (
+            <div className="max-h-[min(32rem,70vh)] overflow-auto rounded-lg border border-white/10 [scrollbar-gutter:stable] [scrollbar-width:thin]">
+              <table className="w-full min-w-[36rem] text-left text-sm">
+                <thead className="sticky top-0 z-[1] bg-slate-950/95 text-xs text-slate-400 backdrop-blur-sm">
+                  <tr className="border-b border-white/10">
+                    <th className="px-4 py-3 font-medium">Model</th>
+                    <th className="px-4 py-3 font-medium">Country</th>
+                    <th className="px-4 py-3 font-medium">Region</th>
+                    <th className="px-4 py-3 font-medium font-mono text-[11px]">ID</th>
+                  </tr>
+                </thead>
+                <tbody className="text-slate-200">
+                  {allModels.map((m) => (
+                    <tr key={m.id} className="border-t border-white/10 hover:bg-white/[0.03]">
+                      <td className="px-4 py-2.5">
+                        <span className="inline-flex items-center gap-2 font-medium text-slate-100">
+                          <Cpu className="h-4 w-4 shrink-0 text-sky-400" />
+                          {m.name}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-slate-300">{m.country_name}</td>
+                      <td className="px-4 py-2.5 text-slate-400">{m.region_name}</td>
+                      <td className="px-4 py-2.5 font-mono text-xs text-slate-500">{m.id}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
       )}
     </>
   );

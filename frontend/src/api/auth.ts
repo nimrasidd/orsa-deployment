@@ -6,6 +6,8 @@ export type UserOut = {
   name: string;
   company_id: string;
   company_name: string | null;
+  /** Full app access; can view all companies' data and manage users. */
+  is_admin?: boolean;
 };
 
 export type LoginOut = {

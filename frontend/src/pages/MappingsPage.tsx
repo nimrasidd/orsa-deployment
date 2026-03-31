@@ -27,6 +27,15 @@ function formatDate(iso: string) {
   }
 }
 
+function formatCreatedBy(m: CompanyModelOut): string {
+  const name = (m.created_by_name || "").trim();
+  const email = (m.created_by_email || "").trim();
+  if (name && email) return `${name} (${email})`;
+  if (name) return name;
+  if (email) return email;
+  return "—";
+}
+
 export function MappingsPage() {
   const [loading, setLoading] = React.useState(true);
   const [mappings, setMappings] = React.useState<MappingOut[]>([]);
@@ -165,7 +174,8 @@ export function MappingsPage() {
     try {
       const created = await createCompanyModel(newModelName.trim());
       toast.success("Model created", { description: created.name });
-      setCompanyModels((prev) => [...prev, created]);
+      const all = await listCompanyModels();
+      setCompanyModels(Array.isArray(all) ? all : []);
       setModelId(created.id);
       setShowCreateModel(false);
       setNewModelName("");
@@ -316,27 +326,51 @@ export function MappingsPage() {
             </div>
             <div className="rounded-lg border border-white/10">
               <div className="border-b border-white/10 px-4 py-2 text-xs font-medium text-slate-400">Your company models</div>
-              <div className="max-h-48 overflow-y-auto p-2">
+              <div className="max-h-[min(28rem,60vh)] overflow-auto [scrollbar-gutter:stable] [scrollbar-width:thin]">
                 {companyModels.length === 0 ? (
                   <div className="py-4 text-center text-sm text-slate-500">No models yet. Create one above.</div>
                 ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {companyModels.map((m) => (
-                      <button
-                        key={m.id}
-                        type="button"
-                        onClick={() => { setModelId(m.id); setTab("list"); }}
-                        className={cn(
-                          "rounded-lg px-3 py-1.5 text-sm ring-1 transition",
-                          modelId === m.id
-                            ? "bg-sky-500/15 text-sky-200 ring-sky-400/30"
-                            : "bg-white/5 text-slate-300 ring-white/10 hover:bg-white/10"
-                        )}
-                      >
-                        {m.name}
-                      </button>
-                    ))}
-                  </div>
+                  <table className="w-full text-left text-sm">
+                    <thead className="sticky top-0 z-[1] bg-slate-950/95 text-xs text-slate-400 backdrop-blur">
+                      <tr className="border-b border-white/10">
+                        <th className="px-4 py-2.5 font-medium">Model name</th>
+                        <th className="px-4 py-2.5 font-medium">Created</th>
+                        <th className="px-4 py-2.5 font-medium">Created by</th>
+                        <th className="px-4 py-2.5 font-medium text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-slate-200">
+                      {companyModels.map((m) => (
+                        <tr
+                          key={m.id}
+                          className={cn(
+                            "border-t border-white/10",
+                            modelId === m.id ? "bg-sky-500/10" : "hover:bg-white/[0.03]"
+                          )}
+                        >
+                          <td className="px-4 py-2.5 font-medium text-slate-100">{m.name}</td>
+                          <td className="px-4 py-2.5 text-xs text-slate-400">
+                            {m.created_at ? formatDate(m.created_at) : "—"}
+                          </td>
+                          <td className="max-w-[14rem] truncate px-4 py-2.5 text-xs text-slate-400" title={formatCreatedBy(m)}>
+                            {formatCreatedBy(m)}
+                          </td>
+                          <td className="px-4 py-2.5 text-right">
+                            <Button
+                              size="sm"
+                              variant={modelId === m.id ? "primary" : "ghost"}
+                              onClick={() => {
+                                setModelId(m.id);
+                                setTab("list");
+                              }}
+                            >
+                              {modelId === m.id ? "Selected" : "Select"}
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 )}
               </div>
             </div>
@@ -514,10 +548,10 @@ export function MappingsPage() {
               />
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="text-xs text-slate-400">
-                  <tr className="[&>th]:pb-3 [&>th]:font-medium">
+            <div className="max-h-[min(28rem,60vh)] overflow-auto rounded-lg border border-white/10 [scrollbar-gutter:stable] [scrollbar-width:thin]">
+              <table className="w-full min-w-[40rem] text-left text-sm">
+                <thead className="sticky top-0 z-[1] bg-slate-950/95 text-xs text-slate-400 backdrop-blur-sm">
+                  <tr className="border-b border-white/10 [&>th]:px-3 [&>th]:pb-3 [&>th]:pt-3 [&>th]:font-medium">
                     <th>Code</th>
                     <th>Description</th>
                     <th>Sheet</th>
@@ -626,10 +660,10 @@ export function MappingsPage() {
             No mappings yet. Upload a mapping Excel file to get started.
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="text-xs text-slate-400">
-                <tr className="[&>th]:pb-3 [&>th]:font-medium">
+          <div className="max-h-[min(28rem,60vh)] overflow-auto rounded-lg border border-white/10 [scrollbar-gutter:stable] [scrollbar-width:thin]">
+            <table className="w-full min-w-[36rem] text-left text-sm">
+              <thead className="sticky top-0 z-[1] bg-slate-950/95 text-xs text-slate-400 backdrop-blur-sm">
+                <tr className="border-b border-white/10 [&>th]:pb-3 [&>th]:pt-3 [&>th]:font-medium">
                   <th>Name</th>
                   <th>Version</th>
                   <th>Status</th>

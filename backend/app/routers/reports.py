@@ -2,21 +2,32 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from ..db import get_db
 from ..schemas import ReportNodeOut, TreeNode
-from ..services.report_queries import get_report_nodes
+from ..services.report_queries import get_report_nodes, get_upload_company_id
+from .auth import UserOut, get_current_user
 
 router = APIRouter(prefix="/uploads", tags=["reports"])
+
+
+def _assert_upload_readable(db: Any, user: UserOut, upload_id: str) -> None:
+    if user.is_admin:
+        return
+    cid = get_upload_company_id(db, upload_id)
+    if cid is None or cid != user.company_id:
+        raise HTTPException(status_code=404, detail="Upload not found")
 
 
 @router.get("/{upload_id}/debug")
 def upload_debug(
     upload_id: str,
     db: Annotated[Any, Depends(get_db)],
+    user: Annotated[UserOut, Depends(get_current_user)],
 ):
     """Debug: return upload info and node count for troubleshooting."""
+    _assert_upload_readable(db, user, upload_id)
     nodes = get_report_nodes(db, upload_id)
     return {
         "upload_id": upload_id,
@@ -40,7 +51,9 @@ def _code_sort_key(code: str) -> tuple:
 def list_nodes(
     upload_id: str,
     db: Annotated[Any, Depends(get_db)],
+    user: Annotated[UserOut, Depends(get_current_user)],
 ):
+    _assert_upload_readable(db, user, upload_id)
     nodes = get_report_nodes(db, upload_id)
     nodes.sort(key=lambda n: _code_sort_key(n["code"]))
     return nodes
@@ -50,7 +63,9 @@ def list_nodes(
 def get_tree(
     upload_id: str,
     db: Annotated[Any, Depends(get_db)],
+    user: Annotated[UserOut, Depends(get_current_user)],
 ):
+    _assert_upload_readable(db, user, upload_id)
     nodes = get_report_nodes(db, upload_id)
     by_code: dict[str, dict] = {n["code"]: n for n in nodes}
     children_map: dict[str, list[dict]] = {n["code"]: [] for n in nodes}

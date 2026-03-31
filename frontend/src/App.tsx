@@ -9,6 +9,7 @@ import { UploadPage } from "./pages/UploadPage";
 import { UploadDetail } from "./pages/UploadDetail";
 import { MappingsPage } from "./pages/MappingsPage";
 import { ModelsPage } from "./pages/ModelsPage";
+import { SettingsPage } from "./pages/SettingsPage";
 import { CompareDetailPage } from "./pages/CompareDetailPage";
 import { NotFound } from "./pages/NotFound";
 import { WorkspaceProvider } from "./workspace/tabs";
@@ -25,6 +26,21 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   }
   if (!user) {
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+  return <>{children}</>;
+}
+
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+  if (loading) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <div className="text-sm text-slate-400">Loading…</div>
+      </div>
+    );
+  }
+  if (!user?.is_admin) {
+    return <Navigate to="/" replace />;
   }
   return <>{children}</>;
 }
@@ -48,6 +64,14 @@ export function App() {
             <Route path="upload" element={<UploadPage />} />
             <Route path="mappings" element={<MappingsPage />} />
             <Route path="models" element={<ModelsPage />} />
+            <Route
+              path="settings"
+              element={
+                <AdminRoute>
+                  <SettingsPage />
+                </AdminRoute>
+              }
+            />
             <Route path="compare/:leftId/:rightId" element={<CompareDetailPage />} />
             <Route path="uploads/:uploadId" element={<UploadDetail />} />
             <Route path="*" element={<NotFound />} />

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from ..db import get_db
+from .auth import UserOut, require_admin
 
 router = APIRouter(prefix="/models", tags=["models"])
 
@@ -53,9 +54,10 @@ def list_all_models(db: Annotated[Any, Depends(get_db)]):
 @router.post("")
 def create_model(
     db: Annotated[Any, Depends(get_db)],
+    _: Annotated[UserOut, Depends(require_admin)],
     body: CreateModelIn,
 ):
-    """Create a new application model for a country."""
+    """Create a new application model for a country (admin only)."""
     country_id = body.country_id
     name = body.name
     import sqlite3

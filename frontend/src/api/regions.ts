@@ -22,6 +22,22 @@ export async function listCompanies(regionId?: string): Promise<CompanyOut[]> {
   return apiFetch<CompanyOut[]>(`/companies${qs}`);
 }
 
+export async function createCompany(input: {
+  name: string;
+  region_id: string;
+  country_id?: string | null;
+}): Promise<CompanyOut> {
+  return apiFetch<CompanyOut>("/companies", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: input.name.trim(),
+      region_id: input.region_id,
+      country_id: input.country_id?.trim() || null,
+    }),
+  });
+}
+
 export type ModelOut = {
   id: string;
   country_id: string;

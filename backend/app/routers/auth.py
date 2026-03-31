@@ -46,6 +46,7 @@ class UserOut(BaseModel):
     name: str
     company_id: str
     company_name: str | None
+    is_admin: bool = False
 
 
 class LoginOut(BaseModel):
@@ -60,6 +61,36 @@ def _create_token(sub: str) -> str:
     return jwt.encode(payload, settings.secret_key, algorithm=ALGORITHM)
 
 
+def _bool_from_db(v: Any) -> bool:
+    if v is None:
+        return False
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)):
+        return bool(v)
+    s = str(v).lower()
+    return s in ("1", "true", "t", "yes")
+
+
+def user_out_from_row(user: dict) -> UserOut:
+    return UserOut(
+        id=str(user["id"]),
+        email=user["email"],
+        name=user["name"],
+        company_id=str(user["company_id"]),
+        company_name=user.get("company_name"),
+        is_admin=_bool_from_db(user.get("is_admin")),
+    )
+
+
+def effective_company_id(user: UserOut, requested: str | None) -> str | None:
+    """Non-admin users are always scoped to their company; admins may pass any filter (or None for all)."""
+    if user.is_admin:
+        r = (requested or "").strip()
+        return r if r else None
+    return user.company_id
+
+
 def _get_user_by_email(conn: Any, email: str) -> dict | None:
     import sqlite3
 
@@ -67,7 +98,8 @@ def _get_user_by_email(conn: Any, email: str) -> dict | None:
     if isinstance(conn, sqlite3.Connection):
         cur = conn.execute(
             """
-            select u.id, u.email, u.name, u.company_id, c.name as company_name
+            select u.id, u.email, u.name, u.company_id, c.name as company_name,
+                   coalesce(u.is_admin, 0) as is_admin
             from users u
             left join companies c on c.id = u.company_id
             where lower(u.email) = ?
@@ -80,7 +112,8 @@ def _get_user_by_email(conn: Any, email: str) -> dict | None:
     with conn.cursor() as cur:
         cur.execute(
             """
-            select u.id, u.email, u.name, u.company_id, c.name as company_name
+            select u.id, u.email, u.name, u.company_id, c.name as company_name,
+                   coalesce(u.is_admin, false) as is_admin
             from public.users u
             left join public.companies c on c.id = u.company_id
             where lower(u.email) = %(email)s
@@ -118,9 +151,8 @@ def _verify_user(conn: Any, email: str, password: str) -> dict | None:
     return r
 
 
-@router.post("/register", response_model=UserOut)
-def register(db: Annotated[Any, Depends(get_db)], body: RegisterIn):
-    """Register a new user with email, password, name, and company."""
+def register_user_account(db: Any, body: RegisterIn) -> UserOut:
+    """Create a user account (shared by public /auth/register and authenticated /settings/users)."""
     import sqlite3
     from uuid import uuid4
     from datetime import datetime, timezone
@@ -147,7 +179,7 @@ def register(db: Annotated[Any, Depends(get_db)], body: RegisterIn):
         if cur.fetchone():
             raise HTTPException(status_code=400, detail="Email already registered")
         db.execute(
-            "insert into users (id, email, password_hash, name, company_id, created_at) values (?, ?, ?, ?, ?, ?)",
+            "insert into users (id, email, password_hash, name, company_id, created_at, is_admin) values (?, ?, ?, ?, ?, ?, 0)",
             (user_id, email, password_hash, body.name.strip(), body.company_id, now),
         )
         db.commit()
@@ -161,7 +193,7 @@ def register(db: Annotated[Any, Depends(get_db)], body: RegisterIn):
                 if cur.fetchone():
                     raise HTTPException(status_code=400, detail="Email already registered")
                 cur.execute(
-                    "insert into public.users (id, email, password_hash, name, company_id, created_at) values (%(id)s, %(email)s, %(password_hash)s, %(name)s, %(company_id)s, %(created_at)s)",
+                    "insert into public.users (id, email, password_hash, name, company_id, created_at, is_admin) values (%(id)s, %(email)s, %(password_hash)s, %(name)s, %(company_id)s, %(created_at)s, false)",
                     {
                         "id": user_id,
                         "email": email,
@@ -175,13 +207,13 @@ def register(db: Annotated[Any, Depends(get_db)], body: RegisterIn):
     full = _get_user_by_email(db, body.email)
     if not full:
         raise HTTPException(status_code=500, detail="User created but not found")
-    return UserOut(
-        id=str(full["id"]),
-        email=full["email"],
-        name=full["name"],
-        company_id=str(full["company_id"]),
-        company_name=full.get("company_name"),
-    )
+    return user_out_from_row(dict(full))
+
+
+@router.post("/register", response_model=UserOut)
+def register(db: Annotated[Any, Depends(get_db)], body: RegisterIn):
+    """Register a new user with email, password, name, and company."""
+    return register_user_account(db, body)
 
 
 @router.post("/login", response_model=LoginOut)
@@ -191,20 +223,14 @@ def login(db: Annotated[Any, Depends(get_db)], body: LoginIn):
     if not user:
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
-    # Get company name
     full = _get_user_by_email(db, body.email)
-    company_name = full.get("company_name") if full else None
+    if not full:
+        raise HTTPException(status_code=500, detail="User record incomplete")
 
     token = _create_token(str(user["id"]))
     return LoginOut(
         access_token=token,
-        user=UserOut(
-            id=str(user["id"]),
-            email=user["email"],
-            name=user["name"],
-            company_id=str(user["company_id"]),
-            company_name=company_name,
-        ),
+        user=user_out_from_row(dict(full)),
     )
 
 
@@ -229,13 +255,7 @@ def get_current_user(
     user = _get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
-    return UserOut(
-        id=str(user["id"]),
-        email=user["email"],
-        name=user["name"],
-        company_id=str(user["company_id"]),
-        company_name=user.get("company_name"),
-    )
+    return user_out_from_row(dict(user))
 
 
 def get_current_user_optional(
@@ -251,13 +271,13 @@ def get_current_user_optional(
     user = _get_user_by_id(db, user_id)
     if not user:
         return None
-    return UserOut(
-        id=str(user["id"]),
-        email=user["email"],
-        name=user["name"],
-        company_id=str(user["company_id"]),
-        company_name=user.get("company_name"),
-    )
+    return user_out_from_row(dict(user))
+
+
+def require_admin(user: Annotated[UserOut, Depends(get_current_user)]) -> UserOut:
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user
 
 
 def _get_user_by_id(conn: Any, user_id: str) -> dict | None:
@@ -266,7 +286,8 @@ def _get_user_by_id(conn: Any, user_id: str) -> dict | None:
     if isinstance(conn, sqlite3.Connection):
         cur = conn.execute(
             """
-            select u.id, u.email, u.name, u.company_id, c.name as company_name
+            select u.id, u.email, u.name, u.company_id, c.name as company_name,
+                   coalesce(u.is_admin, 0) as is_admin
             from users u
             left join companies c on c.id = u.company_id
             where u.id = ?
@@ -279,7 +300,8 @@ def _get_user_by_id(conn: Any, user_id: str) -> dict | None:
     with conn.cursor() as cur:
         cur.execute(
             """
-            select u.id, u.email, u.name, u.company_id, c.name as company_name
+            select u.id, u.email, u.name, u.company_id, c.name as company_name,
+                   coalesce(u.is_admin, false) as is_admin
             from public.users u
             left join public.companies c on c.id = u.company_id
             where u.id = %(id)s

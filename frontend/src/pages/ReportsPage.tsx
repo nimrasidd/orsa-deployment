@@ -18,6 +18,7 @@ import type { UploadOut } from "../types";
 import { toast } from "sonner";
 import { ArrowRight, RefreshCcw } from "lucide-react";
 import { useWorkspace } from "../workspace/tabs";
+import { useAuth } from "../auth/AuthContext";
 
 function formatDate(iso: string) {
   try {
@@ -30,6 +31,7 @@ function formatDate(iso: string) {
 
 export function ReportsPage() {
   const { openOrActivate } = useWorkspace();
+  const { user } = useAuth();
   const [reportKey, setReportKey] = React.useState("");
   const [latestOnly, setLatestOnly] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
@@ -81,6 +83,13 @@ export function ReportsPage() {
     listRegions().then(setRegions).catch(() => setRegions([]));
     listCompanies().then(setCompanies).catch(() => setCompanies([]));
   }, []);
+
+  React.useEffect(() => {
+    if (!user) return;
+    if (!user.is_admin && user.company_id) {
+      setCompanyId(user.company_id);
+    }
+  }, [user?.id, user?.is_admin, user?.company_id]);
 
   React.useEffect(() => {
     if (!companyId) {
@@ -140,9 +149,11 @@ export function ReportsPage() {
               <select
                 value={companyId}
                 onChange={(e) => setCompanyId(e.target.value)}
-                className="h-10 w-full rounded-lg bg-white/5 px-3 text-sm text-slate-100 ring-1 ring-white/10"
+                disabled={!!user && !user.is_admin}
+                title={user && !user.is_admin ? "Your account is limited to your company" : undefined}
+                className="h-10 w-full rounded-lg bg-white/5 px-3 text-sm text-slate-100 ring-1 ring-white/10 disabled:opacity-70"
               >
-                <option value="">All</option>
+                {user?.is_admin ? <option value="">All</option> : null}
                 {companies.map((co) => (
                   <option key={co.id} value={co.id}>{co.name}</option>
                 ))}
@@ -240,7 +251,7 @@ export function ReportsPage() {
             <Button
               variant="ghost"
               onClick={() => {
-                setCompanyId("");
+                setCompanyId(user && !user.is_admin ? user.company_id : "");
                 setRegionId("");
                 setCountryId("");
                 setModelId("");

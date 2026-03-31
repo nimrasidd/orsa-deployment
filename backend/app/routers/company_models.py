@@ -1,10 +1,11 @@
 """Models - parent table: company + creator + name. Mapping references this for model-based mapping."""
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, field_validator
 
 from ..db import get_db
 from .auth import get_current_user, UserOut
@@ -18,6 +19,18 @@ class CompanyModelOut(BaseModel):
     name: str
     company_name: str | None = None
     created_by_user_id: str | None = None
+    created_at: str | None = None
+    created_by_name: str | None = None
+    created_by_email: str | None = None
+
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def _coerce_created_at(cls, v: Any) -> str | None:
+        if v is None:
+            return None
+        if isinstance(v, datetime):
+            return v.isoformat()
+        return str(v) if v != "" else None
 
 
 class CreateCompanyModelIn(BaseModel):
@@ -30,11 +43,13 @@ def _list_company_models(conn: Any, company_id: str) -> list[dict]:
     if isinstance(conn, sqlite3.Connection):
         cur = conn.execute(
             """
-            select m.id, m.company_id, m.name, c.name as company_name, m.created_by_user_id
+            select m.id, m.company_id, m.name, c.name as company_name, m.created_by_user_id,
+                   m.created_at, u.name as created_by_name, u.email as created_by_email
             from models m
             join companies c on c.id = m.company_id
+            left join users u on u.id = m.created_by_user_id
             where m.company_id = ?
-            order by m.name
+            order by (m.created_at is null), m.created_at desc, m.name
             """,
             (company_id,),
         )
@@ -43,24 +58,48 @@ def _list_company_models(conn: Any, company_id: str) -> list[dict]:
     with conn.cursor() as cur:
         cur.execute(
             """
-            select m.id, m.company_id, m.name, c.name as company_name, m.created_by_user_id
+            select m.id, m.company_id, m.name, c.name as company_name, m.created_by_user_id,
+                   m.created_at, u.name as created_by_name, u.email as created_by_email
             from public.models m
             join public.companies c on c.id = m.company_id
+            left join public.users u on u.id = m.created_by_user_id
             where m.company_id = %(company_id)s
-            order by m.name
+            order by (m.created_at is null), m.created_at desc, m.name
             """,
             {"company_id": company_id},
         )
         return list(cur.fetchall())
 
 
+def _company_exists(conn: Any, company_id: str) -> bool:
+    import sqlite3
+
+    if isinstance(conn, sqlite3.Connection):
+        cur = conn.execute("select 1 from companies where id = ? limit 1", (company_id,))
+        return cur.fetchone() is not None
+    with conn.cursor() as cur:
+        cur.execute("select 1 from public.companies where id = %(id)s limit 1", {"id": company_id})
+        return cur.fetchone() is not None
+
+
 @router.get("", response_model=list[CompanyModelOut])
 def list_company_models(
     user: Annotated[UserOut, Depends(get_current_user)],
     db: Annotated[Any, Depends(get_db)],
+    company_id: Annotated[
+        str | None,
+        Query(description="List models for this company. Defaults to your company when omitted."),
+    ] = None,
 ):
-    """List company models for the logged-in user's company."""
-    return _list_company_models(db, user.company_id)
+    """List mapping models (`models` table) for a company — same IDs stored on uploads."""
+    cid = (company_id or "").strip() or user.company_id
+    if not cid:
+        raise HTTPException(status_code=400, detail="No company context")
+    if not user.is_admin and cid != user.company_id:
+        raise HTTPException(status_code=403, detail="Not allowed to view this company's models")
+    if not _company_exists(db, cid):
+        raise HTTPException(status_code=404, detail="Company not found")
+    return _list_company_models(db, cid)
 
 
 @router.post("", response_model=CompanyModelOut)

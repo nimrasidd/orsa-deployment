@@ -16,6 +16,7 @@ from fastapi import HTTPException
 from fastapi import Depends
 from .db import get_db
 from .routers import auth, companies, company_models, countries, mappings, models, regions, reports, reports_list, uploads
+from .routers import settings as settings_router
 from .schemas import HealthOut
 
 app = FastAPI(title="ORSA API - Own Risk And Solvency Assessment")
@@ -173,6 +174,7 @@ app.include_router(mappings.router)
 app.include_router(regions.router)
 app.include_router(countries.router)
 app.include_router(companies.router)
+app.include_router(settings_router.router)
 app.include_router(company_models.router)
 app.include_router(models.router)
 

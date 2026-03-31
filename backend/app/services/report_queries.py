@@ -22,6 +22,8 @@ def _round_to_sig_figs(d: Decimal, n: int = 6) -> Decimal:
     if d == 0:
         return d
     sign, digits, exp = d.as_tuple()
+    if not isinstance(exp, int):
+        return d
     magnitude = len(digits) + exp - 1
     quant_exp = magnitude - n + 1
     quant = Decimal(10) ** quant_exp
@@ -106,7 +108,9 @@ def list_uploads(
                 yf, mf = int(parts[0]), int(parts[1])
                 params["date_from_y"] = yf
                 params["date_from_m"] = mf
-                wheres.append("(report_year > :date_from_y or (report_year = :date_from_y and report_month >= :date_from_m))")
+                wheres.append(
+                    "(report_year > :date_from_y or (report_year = :date_from_y and (report_month is null or report_month >= :date_from_m)))"
+                )
         except (ValueError, IndexError):
             pass
     if date_to:
@@ -116,7 +120,9 @@ def list_uploads(
                 yt, mt = int(parts[0]), int(parts[1])
                 params["date_to_y"] = yt
                 params["date_to_m"] = mt
-                wheres.append("(report_year < :date_to_y or (report_year = :date_to_y and report_month <= :date_to_m))")
+                wheres.append(
+                    "(report_year < :date_to_y or (report_year = :date_to_y and (report_month is null or report_month <= :date_to_m)))"
+                )
         except (ValueError, IndexError):
             pass
     where_clause = " and ".join(wheres)
@@ -181,7 +187,9 @@ def list_uploads(
                 yf, mf = int(parts[0]), int(parts[1])
                 params["date_from_y"] = yf
                 params["date_from_m"] = mf
-                pg_wheres.append("(report_year > %(date_from_y)s or (report_year = %(date_from_y)s and report_month >= %(date_from_m)s))")
+                pg_wheres.append(
+                    "(report_year > %(date_from_y)s or (report_year = %(date_from_y)s and (report_month is null or report_month >= %(date_from_m)s)))"
+                )
         except (ValueError, IndexError):
             pass
     if date_to:
@@ -191,7 +199,9 @@ def list_uploads(
                 yt, mt = int(parts[0]), int(parts[1])
                 params["date_to_y"] = yt
                 params["date_to_m"] = mt
-                pg_wheres.append("(report_year < %(date_to_y)s or (report_year = %(date_to_y)s and report_month <= %(date_to_m)s))")
+                pg_wheres.append(
+                    "(report_year < %(date_to_y)s or (report_year = %(date_to_y)s and (report_month is null or report_month <= %(date_to_m)s)))"
+                )
         except (ValueError, IndexError):
             pass
     pg_where_clause = " and ".join(pg_wheres) if pg_wheres else "true"
@@ -215,10 +225,29 @@ def list_uploads(
         return list(cur.fetchall())
 
 
+def get_upload_company_id(conn: Any, upload_id: str) -> str | None:
+    """Return uploads.company_id for access checks, or None if missing/unknown row."""
+    if isinstance(conn, sqlite3.Connection):
+        cur = conn.execute("select company_id from uploads where id = ?", (upload_id,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        cid = row["company_id"]
+        return str(cid) if cid is not None else None
+    with conn.cursor() as cur:
+        cur.execute("select company_id from public.uploads where id = %(id)s", {"id": upload_id})
+        row = cur.fetchone()
+        if not row:
+            return None
+        cid = row.get("company_id")
+        return str(cid) if cid is not None else None
+
+
 def list_report_nodes(
     conn: Any,
     upload_id: str | None = None,
     report_key: str | None = None,
+    company_id: str | None = None,
     limit: int = 5000,
 ) -> list[dict]:
     """
@@ -236,12 +265,14 @@ def list_report_nodes(
         left join companies c on c.id = u.company_id
         where (:upload_id is null or rn.upload_id = :upload_id)
           and (:report_key is null or u.report_key = :report_key)
+          and (:company_id is null or u.company_id = :company_id)
         order by u.uploaded_at desc, rn.level, rn.code
         limit :limit
         """
         cur = conn.execute(sql, {
             "upload_id": upload_id,
             "report_key": report_key,
+            "company_id": company_id,
             "limit": limit,
         })
         return [dict(r) for r in cur.fetchall()]
@@ -256,6 +287,9 @@ def list_report_nodes(
     if report_key is not None:
         wheres.append("u.report_key = %(report_key)s")
         params["report_key"] = report_key
+    if company_id is not None:
+        wheres.append("u.company_id = %(company_id)s::uuid")
+        params["company_id"] = company_id
     where_clause = " and ".join(wheres) if wheres else "true"
 
     sql = f"""
@@ -276,10 +310,93 @@ def list_report_nodes(
         return list(cur.fetchall())
 
 
+def _date_range_active(date_from: str | None, date_to: str | None) -> bool:
+    return bool((date_from or "").strip() or (date_to or "").strip())
+
+
+def _upload_period_key(u: dict) -> tuple[int, int] | None:
+    yr = u.get("report_year")
+    if yr is None:
+        return None
+    mo = u.get("report_month")
+    if mo is None:
+        return (int(yr), 0)
+    return (int(yr), int(mo))
+
+
+def _period_label(key: tuple[int, int]) -> str:
+    y, m = key
+    if m == 0:
+        return str(y)
+    return f"{y}-{m:02d}"
+
+
+def _upload_quarter_key(u: dict) -> tuple[int, int] | None:
+    yr = u.get("report_year")
+    if yr is None:
+        return None
+    mo = u.get("report_month")
+    if mo is None:
+        return (int(yr), 0)
+    m = int(mo)
+    q = (m - 1) // 3 + 1
+    return (int(yr), q)
+
+
+def _quarter_period_label(key: tuple[int, int]) -> str:
+    y, q = key
+    if q == 0:
+        return str(y)
+    return f"{y} Q{q}"
+
+
+def _is_newer_upload(candidate: dict, current: dict) -> bool:
+    va, vb = candidate.get("version_no", 0), current.get("version_no", 0)
+    if va != vb:
+        return va > vb
+    return (candidate.get("uploaded_at") or "") > (current.get("uploaded_at") or "")
+
+
+def _parse_node_value(v: Any) -> float | None:
+    if v is None:
+        return None
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _metric_from_upload(conn: Any, upload_id: str | None, node_code_lower: str) -> tuple[float | None, str]:
+    if not upload_id:
+        return None, ""
+    try:
+        nodes = get_report_nodes(conn, str(upload_id))
+    except (TypeError, ValueError):
+        nodes = []
+
+    def _matches(n: dict) -> bool:
+        if not node_code_lower:
+            return _parse_node_value(n.get("value")) is not None
+        code = (n.get("code") or "").lower()
+        desc = (n.get("description") or "").lower()
+        return node_code_lower in code or node_code_lower in desc
+
+    for n in nodes:
+        if _matches(n):
+            v = _parse_node_value(n.get("value"))
+            if v is not None:
+                return v, n.get("description") or n.get("code") or ""
+    return None, ""
+
+
 def get_values_by_year(
     conn: Any,
     report_key: str | None = None,
     company_id: str | None = None,
+    region_id: str | None = None,
+    country_id: str | None = None,
+    model_id: str | None = None,
+    latest_only: bool = False,
     node_code: str | None = None,
     year_from: int | None = None,
     year_to: int | None = None,
@@ -287,17 +404,21 @@ def get_values_by_year(
     quarter: int | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
+    period_group: str = "quarter",
 ) -> list[dict]:
     """
-    Get values by report_year for charting. One value per year from latest upload.
-    date_from/date_to: YYYY-MM-DD filter by report period. Overrides year_from/year_to when provided.
-    Returns: [{"year": int, "value": float, "label": str, "upload_id": str}, ...]
+    Chart series: one bar per bucket by period_group — year, quarter (calendar), or month.
+    date_from/date_to still filter uploads via list_uploads.
+    Returns points with "period" label for quarter/month; year bucket uses numeric year on x via period or year.
     """
     uploads = list_uploads(
         conn,
         report_key=report_key,
+        latest_only=latest_only,
+        region_id=region_id,
+        country_id=country_id,
+        model_id=model_id,
         company_id=company_id,
-        latest_only=False,
         report_year=None,
         report_month=report_month,
         year_from=year_from,
@@ -306,67 +427,99 @@ def get_values_by_year(
         date_from=date_from,
         date_to=date_to,
     )
-    # Filter to uploads with report_year
     uploads = [u for u in uploads if u.get("report_year") is not None]
-    # Group by year, keep latest per year (by version_no desc, uploaded_at desc)
+    pg = (period_group or "quarter").strip().lower()
+    if pg not in ("year", "quarter", "month"):
+        pg = "quarter"
+    node_code_lower = (node_code or "").strip().lower()
+    result: list[dict] = []
+
+    if pg == "month":
+        by_key: dict[tuple[int, int], dict] = {}
+        for u in uploads:
+            k = _upload_period_key(u)
+            if k is None:
+                continue
+            if k not in by_key or _is_newer_upload(u, by_key[k]):
+                by_key[k] = u
+        for key in sorted(by_key.keys()):
+            u = by_key[key]
+            upload_id = u.get("id")
+            value, label = _metric_from_upload(conn, upload_id, node_code_lower)
+            if value is None:
+                continue
+            y, m = key
+            row: dict = {
+                "year": y,
+                "value": value,
+                "label": label,
+                "upload_id": str(upload_id),
+                "period": _period_label(key),
+            }
+            if m:
+                row["month"] = m
+            result.append(row)
+        return result
+
+    if pg == "quarter":
+        by_q: dict[tuple[int, int], dict] = {}
+        for u in uploads:
+            k = _upload_quarter_key(u)
+            if k is None:
+                continue
+            if k not in by_q or _is_newer_upload(u, by_q[k]):
+                by_q[k] = u
+        for key in sorted(by_q.keys()):
+            u = by_q[key]
+            upload_id = u.get("id")
+            value, label = _metric_from_upload(conn, upload_id, node_code_lower)
+            if value is None:
+                continue
+            y, q = key
+            row = {
+                "year": y,
+                "value": value,
+                "label": label,
+                "upload_id": str(upload_id),
+                "period": _quarter_period_label(key),
+            }
+            if q:
+                row["quarter"] = q
+            result.append(row)
+        return result
+
     by_year: dict[int, dict] = {}
     for u in uploads:
         yr = int(u["report_year"])
-        if yr not in by_year or (
-            u.get("version_no", 0) > by_year[yr].get("version_no", 0)
-            or (
-                u.get("version_no") == by_year[yr].get("version_no")
-                and (u.get("uploaded_at") or "") > (by_year[yr].get("uploaded_at") or "")
-            )
-        ):
+        if yr not in by_year or _is_newer_upload(u, by_year[yr]):
             by_year[yr] = u
-
-    result: list[dict] = []
-    node_code_lower = (node_code or "").strip().lower()
 
     for year in sorted(by_year.keys()):
         u = by_year[year]
         upload_id = u.get("id")
-        try:
-            nodes = get_report_nodes(conn, str(upload_id))
-        except (TypeError, ValueError):
-            nodes = []
-
-        def _parse_value(v: Any) -> float | None:
-            if v is None:
-                return None
-            try:
-                return float(v)
-            except (TypeError, ValueError):
-                return None
-
-        def _matches(n: dict) -> bool:
-            if not node_code_lower:
-                return _parse_value(n.get("value")) is not None
-            code = (n.get("code") or "").lower()
-            desc = (n.get("description") or "").lower()
-            return node_code_lower in code or node_code_lower in desc
-
-        value = None
-        label = ""
-        for n in nodes:
-            if _matches(n):
-                v = _parse_value(n.get("value"))
-                if v is not None:
-                    value = v
-                    label = n.get("description") or n.get("code") or ""
-                    break
-
+        value, label = _metric_from_upload(conn, upload_id, node_code_lower)
         if value is not None:
-            result.append({"year": year, "value": value, "label": label, "upload_id": str(upload_id)})
+            result.append(
+                {
+                    "year": year,
+                    "value": value,
+                    "label": label,
+                    "upload_id": str(upload_id),
+                    "period": str(year),
+                }
+            )
 
-    return sorted(result, key=lambda x: x["year"])
+    return result
 
 
 def get_values_table(
     conn: Any,
     report_key: str | None = None,
     company_id: str | None = None,
+    region_id: str | None = None,
+    country_id: str | None = None,
+    model_id: str | None = None,
+    latest_only: bool = False,
     node_code: str | None = None,
     year_from: int | None = None,
     year_to: int | None = None,
@@ -374,17 +527,20 @@ def get_values_table(
     quarter: int | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
+    period_group: str = "quarter",
 ) -> dict:
     """
-    Get values as table: rows = metric names, columns = years.
-    date_from/date_to: YYYY-MM-DD filter by report period.
-    Returns: {"years": [2020, 2021, ...], "rows": [{"name": str, "code": str, "values": {year: value}}, ...]}
+    Values as table: columns follow period_group — calendar years, quarters, or months.
+    Returns: {"years": [...], "periods": null | [...], "rows": [...]}.
     """
     uploads = list_uploads(
         conn,
         report_key=report_key,
+        latest_only=latest_only,
+        region_id=region_id,
+        country_id=country_id,
+        model_id=model_id,
         company_id=company_id,
-        latest_only=False,
         report_year=None,
         report_month=report_month,
         year_from=year_from,
@@ -394,35 +550,19 @@ def get_values_table(
         date_to=date_to,
     )
     uploads = [u for u in uploads if u.get("report_year") is not None]
-    by_year: dict[int, dict] = {}
-    for u in uploads:
-        yr = int(u["report_year"])
-        if yr not in by_year or (
-            u.get("version_no", 0) > by_year[yr].get("version_no", 0)
-            or (
-                u.get("version_no") == by_year[yr].get("version_no")
-                and (u.get("uploaded_at") or "") > (by_year[yr].get("uploaded_at") or "")
-            )
-        ):
-            by_year[yr] = u
-
-    years = sorted(by_year.keys())
+    pg = (period_group or "quarter").strip().lower()
+    if pg not in ("year", "quarter", "month"):
+        pg = "quarter"
     node_code_lower = (node_code or "").strip().lower()
 
-    # rows: code -> {name, values: {year: value}}
     rows: dict[str, dict] = {}
 
     def _parse_value(v: Any) -> float | None:
-        if v is None:
-            return None
-        try:
-            return float(v)
-        except (TypeError, ValueError):
-            return None
+        return _parse_node_value(v)
 
-    for year in years:
-        u = by_year[year]
-        upload_id = u.get("id")
+    def _fill_rows_from_nodes(upload_id: str | None, col: str | int) -> None:
+        if not upload_id:
+            return
         try:
             nodes = get_report_nodes(conn, str(upload_id))
         except (TypeError, ValueError):
@@ -441,11 +581,80 @@ def get_values_table(
                 lvl = n.get("level")
                 parent_code = n.get("parent_code") or ""
                 parent_name = code_to_desc.get(parent_code, "")
-                rows[code] = {"name": desc or code, "code": code, "level": lvl if lvl is not None else 0, "parent_name": parent_name, "values": {}}
-            rows[code]["values"][year] = v
+                rows[code] = {
+                    "name": desc or code,
+                    "code": code,
+                    "level": lvl if lvl is not None else 0,
+                    "parent_name": parent_name,
+                    "values": {},
+                }
+            rows[code]["values"][col] = v
+
+    if pg == "month":
+        by_key: dict[tuple[int, int], dict] = {}
+        for u in uploads:
+            k = _upload_period_key(u)
+            if k is None:
+                continue
+            if k not in by_key or _is_newer_upload(u, by_key[k]):
+                by_key[k] = u
+        period_keys = sorted(by_key.keys())
+        periods = [_period_label(k) for k in period_keys]
+
+        for key in period_keys:
+            u = by_key[key]
+            col = _period_label(key)
+            _fill_rows_from_nodes(u.get("id"), col)
+
+        return {
+            "years": [],
+            "periods": periods,
+            "rows": [
+                {"name": r["name"], "code": r["code"], "level": r["level"], "parent_name": r["parent_name"], "values": r["values"]}
+                for r in rows.values()
+            ],
+        }
+
+    if pg == "quarter":
+        by_q: dict[tuple[int, int], dict] = {}
+        for u in uploads:
+            k = _upload_quarter_key(u)
+            if k is None:
+                continue
+            if k not in by_q or _is_newer_upload(u, by_q[k]):
+                by_q[k] = u
+        q_keys = sorted(by_q.keys())
+        periods = [_quarter_period_label(k) for k in q_keys]
+
+        for key in q_keys:
+            u = by_q[key]
+            col = _quarter_period_label(key)
+            _fill_rows_from_nodes(u.get("id"), col)
+
+        return {
+            "years": [],
+            "periods": periods,
+            "rows": [
+                {"name": r["name"], "code": r["code"], "level": r["level"], "parent_name": r["parent_name"], "values": r["values"]}
+                for r in rows.values()
+            ],
+        }
+
+    by_year: dict[int, dict] = {}
+    for u in uploads:
+        yr = int(u["report_year"])
+        if yr not in by_year or _is_newer_upload(u, by_year[yr]):
+            by_year[yr] = u
+
+    years = sorted(by_year.keys())
+
+    for year in years:
+        u = by_year[year]
+        _fill_rows_from_nodes(u.get("id"), year)
 
     return {
         "years": years,
+        "periods": None,
         "rows": [{"name": r["name"], "code": r["code"], "level": r["level"], "parent_name": r["parent_name"], "values": r["values"]} for r in rows.values()],
     }
 

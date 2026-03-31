@@ -69,6 +69,7 @@ def _ensure_users_columns(conn: sqlite3.Connection) -> None:
         ("password_hash", "text"),
         ("company_id", "text"),
         ("created_at", "text"),
+        ("is_admin", "integer default 0"),
     ]:
         try:
             conn.execute(f"alter table users add column {col} {typ}")
@@ -165,6 +166,10 @@ def _ensure_sqlite_uploads_columns(conn: sqlite3.Connection) -> None:
         "update users set password_hash = ? where lower(email) = 'admin@sir.com'",
         (admin_hash,),
     )
+    try:
+        conn.execute("update users set is_admin = 1 where lower(email) = 'admin@sir.com'")
+    except sqlite3.OperationalError:
+        pass
 
     # Add country_id to companies if missing (for existing SQLite DBs)
     try:
@@ -250,7 +255,8 @@ def _init_sqlite(conn: sqlite3.Connection) -> None:
           password_hash text not null,
           name text not null,
           company_id text not null references companies(id),
-          created_at text not null
+          created_at text not null,
+          is_admin integer not null default 0
         )
         """
     )
