@@ -8,7 +8,7 @@ from xlrd.biffh import XLRDError
 
 from ..db import get_db
 from ..schemas import MappingItemOut, MappingOut
-from .auth import UserOut, get_current_user
+from .auth import UserOut, get_current_user, require_admin
 from ..services.mapping_service import (
     extract_values_from_file,
     get_active_mapping_items,
@@ -19,25 +19,34 @@ from ..services.mapping_service import (
 router = APIRouter(prefix="/mappings", tags=["mappings"])
 
 
-def _model_company_id(db: Any, model_id: str) -> str | None:
+def _company_has_model_access(db: Any, company_id: str | None, model_id: str) -> bool:
+    if not company_id:
+        return False
     import sqlite3
 
     if isinstance(db, sqlite3.Connection):
-        cur = db.execute("select company_id from models where id = ?", (model_id,))
-        row = cur.fetchone()
-        return str(row["company_id"]) if row and row["company_id"] else None
+        cur = db.execute(
+            "select 1 from company_model where company_id = ? and model_id = ? limit 1",
+            (company_id, model_id),
+        )
+        return cur.fetchone() is not None
     with db.cursor() as cur:
-        cur.execute("select company_id from public.models where id = %(id)s", {"id": model_id})
-        row = cur.fetchone()
-        return str(row["company_id"]) if row and row.get("company_id") else None
+        cur.execute(
+            """
+            select 1 from public.company_model
+            where company_id = %(cid)s::uuid and model_id = %(mid)s::uuid
+            limit 1
+            """,
+            {"cid": company_id, "mid": model_id},
+        )
+        return cur.fetchone() is not None
 
 
 def _assert_model_for_user(db: Any, user: UserOut, model_id: str | None) -> None:
     if not model_id or user.is_admin:
         return
-    cid = _model_company_id(db, model_id)
-    if cid != user.company_id:
-        raise HTTPException(status_code=403, detail="Model is not in your company")
+    if not user.company_id or not _company_has_model_access(db, user.company_id, model_id):
+        raise HTTPException(status_code=403, detail="Model is not available for your company")
 
 
 def _assert_mapping_for_user(db: Any, user: UserOut, config_id: str) -> None:
@@ -78,7 +87,8 @@ def fetch_mappings_list(
                            count(*) as item_count
                     from mapping m
                     inner join models mod on mod.id = m.model_id
-                    where mod.company_id = ? and m.model_id = ?
+                    inner join company_model cm on cm.model_id = mod.id and cm.company_id = ?
+                    where m.model_id = ?
                     group by m.config_id, m.model_id, m.name, m.version, m.is_active, m.uploaded_at, m.notes
                     order by m.uploaded_at desc
                     """,
@@ -91,7 +101,7 @@ def fetch_mappings_list(
                            count(*) as item_count
                     from mapping m
                     inner join models mod on mod.id = m.model_id
-                    where mod.company_id = ?
+                    inner join company_model cm on cm.model_id = mod.id and cm.company_id = ?
                     group by m.config_id, m.model_id, m.name, m.version, m.is_active, m.uploaded_at, m.notes
                     order by m.uploaded_at desc
                     """,
@@ -154,7 +164,9 @@ def fetch_mappings_list(
                            count(*) as item_count
                     from public.mapping m
                     inner join public.models mod on mod.id = m.model_id
-                    where mod.company_id = %(company_id)s::uuid and m.model_id = %(model_id)s::uuid
+                    inner join public.company_model cm on cm.model_id = mod.id
+                        and cm.company_id = %(company_id)s::uuid
+                    where m.model_id = %(model_id)s::uuid
                     group by m.config_id, m.model_id, m.name, m.version, m.is_active, m.uploaded_at, m.notes
                     order by m.uploaded_at desc
                     """,
@@ -167,7 +179,8 @@ def fetch_mappings_list(
                            count(*) as item_count
                     from public.mapping m
                     inner join public.models mod on mod.id = m.model_id
-                    where mod.company_id = %(company_id)s::uuid
+                    inner join public.company_model cm on cm.model_id = mod.id
+                        and cm.company_id = %(company_id)s::uuid
                     group by m.config_id, m.model_id, m.name, m.version, m.is_active, m.uploaded_at, m.notes
                     order by m.uploaded_at desc
                     """,
@@ -223,7 +236,7 @@ def list_mappings(
 @router.post("", response_model=MappingOut)
 async def create_mapping(
     db: Annotated[Any, Depends(get_db)],
-    user: Annotated[UserOut, Depends(get_current_user)],
+    user: Annotated[UserOut, Depends(require_admin)],
     file: Annotated[UploadFile, File()],
     name: Annotated[str, Form()],
     model_id: Annotated[str | None, Form()] = None,
@@ -350,38 +363,41 @@ def get_mapping_items(
 def activate_mapping(
     mapping_id: str,
     db: Annotated[Any, Depends(get_db)],
-    user: Annotated[UserOut, Depends(get_current_user)],
+    user: Annotated[UserOut, Depends(require_admin)],
 ):
-    """Activate a mapping (deactivates others with same name and model)."""
+    """Activate a mapping (only one active per model — deactivates all other configs for that model)."""
     import sqlite3
 
     _assert_mapping_for_user(db, user, mapping_id)
     cfg = mapping_id
     if isinstance(db, sqlite3.Connection):
-        cur = db.execute("select name, model_id from mapping where config_id = :id limit 1", {"id": cfg})
+        cur = db.execute("select model_id from mapping where config_id = :id limit 1", {"id": cfg})
         row = cur.fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Mapping not found")
-        row = dict(zip(row.keys(), row))  # sqlite3.Row has no .get()
-        name, mid = row["name"], row.get("model_id")
+        row = dict(zip(row.keys(), row))
+        mid = row.get("model_id")
         if mid:
-            db.execute("update mapping set is_active = 0 where name = :name and model_id = :mid", {"name": name, "mid": mid})
+            db.execute("update mapping set is_active = 0 where model_id = :mid", {"mid": mid})
         else:
-            db.execute("update mapping set is_active = 0 where name = :name and model_id is null", {"name": name})
+            db.execute("update mapping set is_active = 0 where model_id is null")
         db.execute("update mapping set is_active = 1 where config_id = :id", {"id": cfg})
         db.commit()
     else:
         with db.transaction():
             with db.cursor() as cur:
-                cur.execute("select name, model_id from public.mapping where config_id = %(id)s limit 1", {"id": cfg})
+                cur.execute("select model_id from public.mapping where config_id = %(id)s limit 1", {"id": cfg})
                 row = cur.fetchone()
                 if not row:
                     raise HTTPException(status_code=404, detail="Mapping not found")
-                name, mid = row["name"], row.get("model_id")
-                cur.execute(
-                    "update public.mapping set is_active = false where name = %(name)s and (model_id is not distinct from %(mid)s)",
-                    {"name": name, "mid": mid},
-                )
+                mid = row.get("model_id")
+                if mid:
+                    cur.execute(
+                        "update public.mapping set is_active = false where model_id = %(mid)s::uuid",
+                        {"mid": mid},
+                    )
+                else:
+                    cur.execute("update public.mapping set is_active = false where model_id is null")
                 cur.execute("update public.mapping set is_active = true where config_id = %(id)s", {"id": cfg})
 
     scope = None if user.is_admin else user.company_id
@@ -398,7 +414,7 @@ def activate_mapping(
 def delete_mapping(
     mapping_id: str,
     db: Annotated[Any, Depends(get_db)],
-    user: Annotated[UserOut, Depends(get_current_user)],
+    user: Annotated[UserOut, Depends(require_admin)],
 ):
     """Delete a mapping (cascades to items)."""
     import sqlite3

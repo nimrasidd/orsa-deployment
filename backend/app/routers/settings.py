@@ -16,7 +16,7 @@ class UserListOut(BaseModel):
     id: str
     email: str
     name: str
-    company_id: str
+    company_id: str | None = None
     company_name: str | None = None
     created_at: str | None = None
 
@@ -92,7 +92,7 @@ def list_users(
             id=str(r["id"]),
             email=r["email"],
             name=r["name"],
-            company_id=str(r["company_id"]),
+            company_id=str(r["company_id"]) if r.get("company_id") is not None else None,
             company_name=r.get("company_name"),
             created_at=str(r["created_at"]) if r.get("created_at") is not None else None,
         )
@@ -151,7 +151,7 @@ def update_user_company(
         id=str(updated["id"]),
         email=updated["email"],
         name=updated["name"],
-        company_id=str(updated["company_id"]),
+        company_id=str(updated["company_id"]) if updated.get("company_id") is not None else None,
         company_name=updated.get("company_name"),
         created_at=str(updated["created_at"]) if updated.get("created_at") is not None else None,
     )

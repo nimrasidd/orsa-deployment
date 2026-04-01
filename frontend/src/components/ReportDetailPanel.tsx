@@ -1,9 +1,11 @@
 import * as React from "react";
 import { toast } from "sonner";
 import { getUploadDebug, getUploadNodes, getUploadTree } from "../api/uploads";
+import { HierarchyCodeCell } from "./HierarchyCodeCell";
+import { HierarchyExpandControls } from "./HierarchyExpandControls";
 import { ReportTreeDiagram } from "./ReportTreeDiagram";
-import { TreeView } from "./TreeView";
 import { Input } from "./Input";
+import { computeHierarchyTableView } from "../lib/hierarchyTable";
 import { formatValueToSigFigs } from "../lib/format";
 import type { ReportNodeOut, TreeNode } from "../types";
 
@@ -26,9 +28,9 @@ export function ReportDetailPanel({ uploadId, title, compact }: Props) {
   const [nodes, setNodes] = React.useState<ReportNodeOut[]>([]);
   const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set());
   const [search, setSearch] = React.useState("");
-  const [selected, setSelected] = React.useState<TreeNode | null>(null);
-  const [view, setView] = React.useState<"tree" | "nodes" | "diagram">("diagram");
+  const [view, setView] = React.useState<"table" | "diagram">("diagram");
   const [debug, setDebug] = React.useState<{ node_count: number; has_nodes: boolean } | null>(null);
+  const [tableExpanded, setTableExpanded] = React.useState<Set<string>>(() => new Set());
 
   async function load() {
     setLoading(true);
@@ -39,7 +41,7 @@ export function ReportDetailPanel({ uploadId, title, compact }: Props) {
       const exp = new Set<string>();
       collectExpandableCodes(tree.slice(0, 3), exp);
       setExpanded(exp);
-      setSelected(null);
+      setTableExpanded(new Set());
       if (tree.length === 0 && flat.length === 0) {
         getUploadDebug(uploadId)
           .then((d) => setDebug({ node_count: d.node_count, has_nodes: d.has_nodes }))
@@ -61,14 +63,39 @@ export function ReportDetailPanel({ uploadId, title, compact }: Props) {
     void load();
   }, [uploadId]);
 
-  function onToggle(code: string) {
-    setExpanded((prev) => {
+  const tableHierarchyRows = React.useMemo(
+    () =>
+      nodes.map((n) => ({
+        ...n,
+        parent_code: n.parent_code?.trim() || null
+      })),
+    [nodes]
+  );
+
+  const filteredTableRows = React.useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return tableHierarchyRows;
+    return tableHierarchyRows.filter((n) =>
+      `${n.code} ${n.description ?? ""}`.toLowerCase().includes(q)
+    );
+  }, [tableHierarchyRows, search]);
+
+  const tableView = React.useMemo(
+    () =>
+      computeHierarchyTableView(tableHierarchyRows, filteredTableRows, tableExpanded, search.trim() !== ""),
+    [tableHierarchyRows, filteredTableRows, tableExpanded, search]
+  );
+
+  const toggleTableRow = React.useCallback((code: string) => {
+    setTableExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(code)) next.delete(code);
       else next.add(code);
       return next;
     });
-  }
+  }, []);
+
+  const tableFlatLimited = React.useMemo(() => tableView.flat.slice(0, 300), [tableView.flat]);
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-xl bg-slate-900/50 ring-1 ring-white/5">
@@ -77,11 +104,10 @@ export function ReportDetailPanel({ uploadId, title, compact }: Props) {
         <div className="flex items-center gap-2">
           <select
             value={view}
-            onChange={(e) => setView(e.target.value as "tree" | "nodes" | "diagram")}
+            onChange={(e) => setView(e.target.value as "table" | "diagram")}
             className="h-8 rounded-lg bg-white/5 px-2 text-xs text-slate-100 ring-1 ring-white/10"
           >
-            <option value="tree">Tree</option>
-            <option value="nodes">Nodes</option>
+            <option value="table">Table</option>
             <option value="diagram">Diagram</option>
           </select>
           {!compact && (
@@ -100,68 +126,71 @@ export function ReportDetailPanel({ uploadId, title, compact }: Props) {
         ) : view === "diagram" ? (
           roots.length ? (
             <div className="flex min-h-0 flex-1 flex-col overflow-auto">
-              <ReportTreeDiagram
-              roots={roots}
-              expanded={expanded}
-              onExpandedChange={setExpanded}
-              onSelect={setSelected}
-            />
+              <ReportTreeDiagram roots={roots} expanded={expanded} onExpandedChange={setExpanded} />
             </div>
           ) : (
             <div className="py-8 text-center text-sm text-slate-500">
-              No nodes. {debug != null && `Debug: ${debug.node_count} node(s).`}
+              No hierarchy to diagram. {debug != null && `Debug: ${debug.node_count} row(s).`}
             </div>
           )
-        ) : view === "tree" ? (
-          roots.length ? (
-            <TreeView
-              roots={roots}
-              search={search}
-              expanded={expanded}
-              onToggle={onToggle}
-              selectedCode={selected?.code}
-              onSelect={setSelected}
-            />
-          ) : (
-            <div className="py-8 text-center text-sm text-slate-500">No nodes.</div>
-          )
         ) : nodes.length ? (
-          <div className="overflow-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="text-slate-400">
-                <tr>
-                  <th className="pb-2 pr-2">Code</th>
-                  <th className="pb-2 pr-2">Level</th>
-                  <th className="hidden pb-2 pr-2 md:table-cell">Description</th>
-                  <th className="pb-2 text-right">Value</th>
-                </tr>
-              </thead>
-              <tbody className="text-slate-200">
-                {nodes
-                  .filter((n) => {
-                    const q = search.trim().toLowerCase();
-                    if (!q) return true;
-                    return `${n.code} ${n.description ?? ""}`.toLowerCase().includes(q);
-                  })
-                  .slice(0, 300)
-                  .map((n) => (
-                    <tr key={n.id} className="border-t border-white/5">
-                      <td className="py-1.5 pr-2 font-medium">{n.code}</td>
-                      <td className="py-1.5 pr-2">{n.level}</td>
-                      <td className="hidden py-1.5 pr-2 md:table-cell truncate max-w-[120px]">
-                        {n.description ?? ""}
+          <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
+            <HierarchyExpandControls
+              canExpand={tableView.codesWithChildren.size > 0}
+              onExpandAll={() => setTableExpanded(new Set(tableView.codesWithChildren))}
+              onCollapseAll={() => setTableExpanded(new Set())}
+            />
+            <div className="min-h-0 flex-1 overflow-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="text-slate-400">
+                  <tr>
+                    <th className="pb-2 pr-2">Code</th>
+                    <th className="pb-2 pr-2">Level</th>
+                    <th className="hidden pb-2 pr-2 md:table-cell">Description</th>
+                    <th className="pb-2 text-right">Value</th>
+                  </tr>
+                </thead>
+                <tbody className="text-slate-200">
+                  {filteredTableRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="border-t border-white/5 py-6 text-center text-slate-500">
+                        No rows match your search.
                       </td>
-                      <td className="py-1.5 text-right text-slate-100">{formatValueToSigFigs(n.value)}</td>
                     </tr>
-                  ))}
-              </tbody>
-            </table>
-            {nodes.length > 300 && (
-              <div className="mt-2 text-xs text-slate-500">Showing first 300. Use search to narrow.</div>
-            )}
+                  ) : (
+                    tableFlatLimited.map(({ row: n, depth }) => {
+                      const hasKids = tableView.codesWithChildren.has(n.code);
+                      const isOpen = tableView.expandedForWalk.has(n.code);
+                      return (
+                        <tr key={n.id} className="border-t border-white/5">
+                          <td className="py-1.5 pr-2 font-medium">
+                            <HierarchyCodeCell
+                              code={n.code}
+                              depth={depth}
+                              hasChildren={hasKids}
+                              isExpanded={isOpen}
+                              onToggle={() => toggleTableRow(n.code)}
+                              textClassName="font-medium text-slate-100"
+                            />
+                          </td>
+                          <td className="py-1.5 pr-2">{n.level}</td>
+                          <td className="hidden max-w-[120px] truncate py-1.5 pr-2 md:table-cell">
+                            {n.description ?? ""}
+                          </td>
+                          <td className="py-1.5 text-right text-slate-100">{formatValueToSigFigs(n.value)}</td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+              {tableView.flat.length > 300 ? (
+                <div className="mt-2 text-xs text-slate-500">Showing first 300 visible rows. Use search or collapse.</div>
+              ) : null}
+            </div>
           </div>
         ) : (
-          <div className="py-8 text-center text-sm text-slate-500">No nodes found.</div>
+          <div className="py-8 text-center text-sm text-slate-500">No rows to show.</div>
         )}
       </div>
     </div>

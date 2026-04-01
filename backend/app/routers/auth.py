@@ -44,8 +44,8 @@ class UserOut(BaseModel):
     id: str
     email: str
     name: str
-    company_id: str
-    company_name: str | None
+    company_id: str | None = None
+    company_name: str | None = None
     is_admin: bool = False
 
 
@@ -73,11 +73,15 @@ def _bool_from_db(v: Any) -> bool:
 
 
 def user_out_from_row(user: dict) -> UserOut:
+    cid = user.get("company_id")
+    company_id = None if cid is None else str(cid)
+    if company_id == "":
+        company_id = None
     return UserOut(
         id=str(user["id"]),
         email=user["email"],
         name=user["name"],
-        company_id=str(user["company_id"]),
+        company_id=company_id,
         company_name=user.get("company_name"),
         is_admin=_bool_from_db(user.get("is_admin")),
     )
@@ -88,6 +92,8 @@ def effective_company_id(user: UserOut, requested: str | None) -> str | None:
     if user.is_admin:
         r = (requested or "").strip()
         return r if r else None
+    if not user.company_id:
+        raise HTTPException(status_code=403, detail="No company assigned to this account")
     return user.company_id
 
 

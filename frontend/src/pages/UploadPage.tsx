@@ -2,15 +2,20 @@ import * as React from "react";
 import { useDropzone } from "react-dropzone";
 import { toast } from "sonner";
 import { createUpload, previewUpload } from "../api/uploads";
-import { getActiveMappingItems } from "../api/mappings";
+import { listMappings } from "../api/mappings";
 import { listCompanyModels, type CompanyModelOut } from "../api/companyModels";
+import type { MappingOut } from "../types";
+import { listAllCountries, listCompanies, type CompanyOut, type CountryOut } from "../api/regions";
 import { useAuth } from "../auth/AuthContext";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
+import { HierarchyCodeCell } from "../components/HierarchyCodeCell";
+import { HierarchyExpandControls } from "../components/HierarchyExpandControls";
 import { Input } from "../components/Input";
-import { FileSpreadsheet, UploadCloud, MapPin } from "lucide-react";
+import { Columns2, FileSpreadsheet, UploadCloud, MapPin } from "lucide-react";
 import { cn } from "../lib/cn";
 import { formatValueToSigFigs } from "../lib/format";
+import { computeHierarchyTableView, withInferredDottedParents } from "../lib/hierarchyTable";
 import { Link, useNavigate } from "react-router-dom";
 import { useWorkspace } from "../workspace/tabs";
 import { Badge } from "../components/Badge";
@@ -30,8 +35,9 @@ export function UploadPage() {
   const [notes, setNotes] = React.useState("");
   const [file, setFile] = React.useState<File | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
-  const [useMapping, setUseMapping] = React.useState(true);
-  const [hasActiveMapping, setHasActiveMapping] = React.useState(false);
+  const [modelMappings, setModelMappings] = React.useState<MappingOut[]>([]);
+  /** "manual" or mapping config_id (uuid). */
+  const [extractionMode, setExtractionMode] = React.useState<"manual" | string>("manual");
 
   const [companyModels, setCompanyModels] = React.useState<CompanyModelOut[]>([]);
   const [modelId, setModelId] = React.useState("");
@@ -40,18 +46,124 @@ export function UploadPage() {
   const [previewItems, setPreviewItems] = React.useState<
     { code: string; description?: string | null; sheet_name: string; cell_ref: string; value: string | null }[] | null
   >(null);
+  const [previewTableExpanded, setPreviewTableExpanded] = React.useState<Set<string>>(() => new Set());
   const [previewFileSheets, setPreviewFileSheets] = React.useState<string[] | null>(null);
   const [previewLoading, setPreviewLoading] = React.useState(false);
+  const [allCompanies, setAllCompanies] = React.useState<CompanyOut[]>([]);
+  const [allCountries, setAllCountries] = React.useState<CountryOut[]>([]);
+  const [uploadCompanyId, setUploadCompanyId] = React.useState("");
+  const [uploadCountryId, setUploadCountryId] = React.useState("");
 
   React.useEffect(() => {
-    getActiveMappingItems(modelId || undefined)
-      .then((items) => setHasActiveMapping(items.length > 0))
-      .catch(() => setHasActiveMapping(false));
+    listCompanies()
+      .then((c) => setAllCompanies(Array.isArray(c) ? c : []))
+      .catch(() => setAllCompanies([]));
+  }, []);
+
+  React.useEffect(() => {
+    listAllCountries()
+      .then((c) => setAllCountries(Array.isArray(c) ? c : []))
+      .catch(() => setAllCountries([]));
+  }, []);
+
+  React.useEffect(() => {
+    if (!user?.is_admin) {
+      setUploadCompanyId("");
+      return;
+    }
+    const arr = allCompanies;
+    setUploadCompanyId((prev) => (prev && arr.some((x) => x.id === prev) ? prev : arr[0]?.id ?? ""));
+  }, [user?.is_admin, allCompanies]);
+
+  const companyLinkedCountryIds = React.useMemo(() => {
+    const s = new Set<string>();
+    for (const co of allCompanies) {
+      if (co.country_id) s.add(co.country_id);
+    }
+    return s;
+  }, [allCompanies]);
+
+  const uploadCountryOptions = React.useMemo(() => {
+    return allCountries
+      .filter((c) => companyLinkedCountryIds.has(c.id))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [allCountries, companyLinkedCountryIds]);
+
+  React.useEffect(() => {
+    if (!user?.is_admin) return;
+    const co = allCompanies.find((c) => c.id === uploadCompanyId);
+    const cid = co?.country_id;
+    if (cid && companyLinkedCountryIds.has(cid)) setUploadCountryId(cid);
+    else setUploadCountryId("");
+  }, [user?.is_admin, uploadCompanyId, allCompanies, companyLinkedCountryIds]);
+
+  React.useEffect(() => {
+    if (user?.is_admin || !user?.company_id) return;
+    const co = allCompanies.find((c) => c.id === user.company_id);
+    const cid = co?.country_id;
+    if (cid && companyLinkedCountryIds.has(cid)) setUploadCountryId(cid);
+    else setUploadCountryId("");
+  }, [user?.is_admin, user?.company_id, allCompanies, companyLinkedCountryIds]);
+
+  React.useEffect(() => {
+    if (!modelId) {
+      setModelMappings([]);
+      setExtractionMode("manual");
+      return;
+    }
+    setModelMappings([]);
+    setExtractionMode("manual");
+    let cancelled = false;
+    listMappings(modelId)
+      .then((rows) => {
+        if (cancelled) return;
+        const arr = Array.isArray(rows) ? rows : [];
+        setModelMappings(arr);
+        const active = arr.find((m) => m.is_active);
+        const pick = active?.id ?? arr[0]?.id;
+        setExtractionMode(pick ?? "manual");
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setModelMappings([]);
+          setExtractionMode("manual");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [modelId]);
 
   React.useEffect(() => {
-    listCompanyModels().then(setCompanyModels).catch(() => setCompanyModels([]));
-  }, []);
+    if (!user) return;
+    let cancelled = false;
+    const run = async () => {
+      const companyForModels = user.is_admin
+        ? uploadCompanyId || undefined
+        : user.company_id || undefined;
+      if (!companyForModels) {
+        setCompanyModels([]);
+        setModelId("");
+        return;
+      }
+      try {
+        const data = await listCompanyModels(companyForModels);
+        if (cancelled) return;
+        const arr = Array.isArray(data) ? data : [];
+        setCompanyModels(arr);
+        setModelId((mid) => (mid && arr.some((m) => m.id === mid) ? mid : ""));
+      } catch {
+        if (!cancelled) {
+          setCompanyModels([]);
+          setModelId("");
+        }
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, user?.is_admin, user?.company_id, uploadCompanyId]);
 
   const derivedReportKey = React.useMemo(() => {
     if (!modelId || !reportYear || !reportMonth) return "";
@@ -64,6 +176,9 @@ export function UploadPage() {
     if (derivedReportKey) setReportKey(derivedReportKey);
   }, [derivedReportKey]);
 
+  const useCellMapping = extractionMode !== "manual";
+  const selectedMappingConfigId = useCellMapping ? extractionMode : undefined;
+
   const dz = useDropzone({
     accept: {
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx", ".xlsm"],
@@ -75,45 +190,54 @@ export function UploadPage() {
       setFile(f);
       setPreviewItems(null);
       setPreviewFileSheets(null);
-      if (f && hasActiveMapping && useMapping) {
-        setPreviewLoading(true);
-        previewUpload(f, modelId || undefined)
-          .then((r) => {
-            setPreviewItems(r.items);
-            setPreviewFileSheets(r.file_sheets ?? null);
-          })
-          .catch((e: any) => {
-            setPreviewItems(null);
-            setPreviewFileSheets(null);
-            const msg = e?.message ?? (e?.detail != null ? String(e.detail) : "Preview failed");
-            toast.error("Preview failed", { description: msg });
-          })
-          .finally(() => setPreviewLoading(false));
-      }
     },
     onDropRejected: () => toast.error("Please choose a valid Excel file (.xlsx, .xlsm, or .xls).")
   });
 
   React.useEffect(() => {
-    if (file && hasActiveMapping && useMapping && !previewItems && !previewLoading) {
-      setPreviewLoading(true);
-      previewUpload(file, modelId || undefined)
-        .then((r) => {
-          setPreviewItems(r.items);
-          setPreviewFileSheets(r.file_sheets ?? null);
-        })
-        .catch((e: any) => {
-          setPreviewItems(null);
-          setPreviewFileSheets(null);
-          const msg = e?.message ?? (e?.detail != null ? String(e.detail) : "Preview failed");
-          toast.error("Preview failed", { description: msg });
-        })
-        .finally(() => setPreviewLoading(false));
-    } else if (!file || !useMapping) {
+    if (!file || !useCellMapping || !selectedMappingConfigId) {
       setPreviewItems(null);
       setPreviewFileSheets(null);
+      setPreviewLoading(false);
+      return;
     }
-  }, [file, hasActiveMapping, useMapping, modelId]);
+    setPreviewLoading(true);
+    previewUpload(file, modelId || undefined, selectedMappingConfigId)
+      .then((r) => {
+        setPreviewItems(r.items);
+        setPreviewFileSheets(r.file_sheets ?? null);
+      })
+      .catch((e: any) => {
+        setPreviewItems(null);
+        setPreviewFileSheets(null);
+        const msg = e?.message ?? (e?.detail != null ? String(e.detail) : "Preview failed");
+        toast.error("Preview failed", { description: msg });
+      })
+      .finally(() => setPreviewLoading(false));
+  }, [file, useCellMapping, selectedMappingConfigId, modelId]);
+
+  React.useEffect(() => {
+    setPreviewTableExpanded(new Set());
+  }, [previewItems]);
+
+  const previewHierarchyRows = React.useMemo(() => {
+    if (!previewItems?.length) return [];
+    return withInferredDottedParents(previewItems);
+  }, [previewItems]);
+
+  const previewTableView = React.useMemo(
+    () => computeHierarchyTableView(previewHierarchyRows, previewHierarchyRows, previewTableExpanded, false),
+    [previewHierarchyRows, previewTableExpanded]
+  );
+
+  const togglePreviewTableRow = React.useCallback((code: string) => {
+    setPreviewTableExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(code)) next.delete(code);
+      else next.add(code);
+      return next;
+    });
+  }, []);
 
   async function onSubmit() {
     if (!file) {
@@ -128,20 +252,33 @@ export function UploadPage() {
       toast.error("Report date (year and month) is required for dashboard filtering.");
       return;
     }
+    const resolvedCompanyId = user?.company_id || (user?.is_admin ? uploadCompanyId : "") || "";
+    if (!resolvedCompanyId) {
+      toast.error(user?.is_admin ? "Select which company this upload belongs to." : "Your account has no company.");
+      return;
+    }
+    if (uploadCountryOptions.length > 0 && !uploadCountryId) {
+      toast.error("Select a country (only countries assigned to at least one company are listed).");
+      return;
+    }
+    const coRow = allCompanies.find((c) => c.id === resolvedCompanyId);
     setSubmitting(true);
     try {
       const created = await createUpload({
         file,
         report_key: reportKey.trim(),
         notes: notes.trim() ? notes.trim() : undefined,
-        use_mapping: useMapping,
+        use_mapping: useCellMapping,
+        mapping_config_id: selectedMappingConfigId,
         model_id: modelId || undefined,
-        company_id: user?.company_id || undefined,
-        report_year: reportYear !== "" ? reportYear : undefined,
-        report_month: reportMonth !== "" ? reportMonth : undefined,
+        company_id: resolvedCompanyId,
+        region_id: coRow?.region_id || undefined,
+        country_id: uploadCountryId || undefined,
+        report_year: typeof reportYear === "number" ? reportYear : undefined,
+        report_month: typeof reportMonth === "number" ? reportMonth : undefined,
       });
       toast.success("Upload created", {
-        description: `Version v${created.version_no}${useMapping && hasActiveMapping ? " (using mapping)" : ""}`
+        description: `Version v${created.version_no}${useCellMapping ? " (mapping)" : ""}`
       });
       openOrActivate({
         path: `/uploads/${created.id}`,
@@ -169,18 +306,24 @@ export function UploadPage() {
       <Card
         title="Upload Excel"
         subtitle={
-          hasActiveMapping
-            ? "Values will be extracted using the active mapping configuration."
-            : "No active mapping. Upload file must contain Code, Description, Value columns."
+          !modelId
+            ? "Choose a model, then pick which of its saved mappings to use from the dropdown (or Manual)."
+            : useCellMapping
+              ? "Extraction uses the mapping selected below: each code is read from its Sheet + Cell."
+              : "Manual layout: the file must include Code, Description, Value columns (no cell mapping)."
         }
         actions={
           <div className="flex flex-wrap items-center gap-3">
-            {hasActiveMapping && (
+            {useCellMapping && (
               <Badge className="bg-green-500/15 text-green-200 ring-green-400/25">
                 <MapPin className="mr-1 inline h-3.5 w-3.5" />
-                Mapping active
+                Cell mapping
               </Badge>
             )}
+            <Button type="button" variant="ghost" onClick={() => nav("/models")}>
+              <Columns2 className="h-4 w-4" />
+              Compare reports
+            </Button>
             <Link to="/">
               <Button variant="ghost">Back</Button>
             </Link>
@@ -189,9 +332,46 @@ export function UploadPage() {
       >
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div className="space-y-3">
-            {user?.company_name && (
+            {user?.is_admin ? (
+              <div>
+                <div className="mb-2 text-xs font-medium text-slate-300">Company</div>
+                <select
+                  value={uploadCompanyId}
+                  onChange={(e) => setUploadCompanyId(e.target.value)}
+                  className="h-11 w-full rounded-xl bg-white/5 px-4 text-sm text-slate-100 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-sky-400/60"
+                >
+                  <option value="">Select company</option>
+                  {allCompanies.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+                <div className="mt-1 text-xs text-slate-500">Upload is stored under this company.</div>
+              </div>
+            ) : user?.company_name ? (
               <div className="rounded-xl bg-white/5 px-4 py-2 text-sm text-slate-300">
                 <span className="text-slate-500">Company:</span> {user.company_name}
+              </div>
+            ) : null}
+            {uploadCountryOptions.length > 0 ? (
+              <div>
+                <div className="mb-2 text-xs font-medium text-slate-300">Country</div>
+                <select
+                  value={uploadCountryId}
+                  onChange={(e) => setUploadCountryId(e.target.value)}
+                  className="h-11 w-full rounded-xl bg-white/5 px-4 text-sm text-slate-100 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-sky-400/60"
+                >
+                  <option value="">Select country</option>
+                  {uploadCountryOptions.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+                <div className="mt-1 text-xs text-slate-500">
+                  Only countries linked to a company in master data are shown.
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-xl bg-amber-500/10 px-4 py-2 text-xs text-amber-100/90 ring-1 ring-amber-400/20">
+                No company has a country set in Settings → Companies. Add a country to your company to tag uploads.
               </div>
             )}
             <div>
@@ -207,9 +387,46 @@ export function UploadPage() {
                 ))}
               </select>
               <div className="mt-2 text-xs text-slate-400">
-                Create models in <Link to="/mappings" className="text-sky-400 hover:text-sky-300">Mappings</Link> if none listed.
+                {user?.is_admin ? (
+                  <>
+                    Add mapping models under{" "}
+                    <Link to="/mappings" className="text-sky-400 hover:text-sky-300">
+                      Mappings
+                    </Link>{" "}
+                    → Models if none are listed.
+                  </>
+                ) : (
+                  "If no models appear, ask your administrator."
+                )}
               </div>
             </div>
+
+            <div>
+              <div className="mb-2 text-xs font-medium text-slate-300">
+                Mapping for this model <span className="font-normal text-slate-500">(dropdown)</span>
+              </div>
+              <select
+                value={extractionMode}
+                onChange={(e) => setExtractionMode(e.target.value as "manual" | string)}
+                disabled={!modelId}
+                className="h-11 w-full rounded-xl bg-white/5 px-4 text-sm text-slate-100 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-sky-400/60 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <option value="manual">
+                  Manual — file has Code, Description, Value (and sheet/cell columns as needed)
+                </option>
+                {modelMappings.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name} (v{m.version}){m.is_active ? " • active" : ""} — Code → Sheet, Cell
+                  </option>
+                ))}
+              </select>
+              <div className="mt-2 text-xs text-slate-400">
+                {modelId
+                  ? "Pick a saved mapping for the selected model to extract values by Code → Sheet, Cell. Choose Manual if the workbook already has values in columns instead."
+                  : "Select a model first; all mappings defined for that model appear in this list."}
+              </div>
+            </div>
+
             <div>
               <div className="mb-2 text-xs font-medium text-slate-300">Report date</div>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-2">
@@ -251,27 +468,9 @@ export function UploadPage() {
                 onChange={(e) => setReportKey(e.target.value)}
               />
               <div className="mt-2 text-xs text-slate-400">
-                Auto-generated from Model/Year/Month, or enter custom.
+                Filled from Model + Year + Month above; edit to use a custom key.
               </div>
             </div>
-
-            {hasActiveMapping && (
-              <div>
-                <label className="flex h-11 items-center justify-between gap-3 rounded-xl bg-white/5 px-4 text-sm ring-1 ring-white/10">
-                  <span className="text-slate-300">Use active mapping</span>
-                  <input
-                    type="checkbox"
-                    checked={useMapping}
-                    onChange={(e) => setUseMapping(e.target.checked)}
-                    className="h-4 w-4 accent-sky-400"
-                  />
-                </label>
-                <div className="mt-2 text-xs text-slate-400">
-                  When enabled, values are extracted from uploaded file based on mapping (Code → Sheet, Cell).
-                  When disabled, file must contain Code, Description, Value columns.
-                </div>
-              </div>
-            )}
 
             <div>
               <div className="mb-2 text-xs font-medium text-slate-300">Notes (optional)</div>
@@ -325,7 +524,7 @@ export function UploadPage() {
               </Button>
             </div>
 
-            {hasActiveMapping && useMapping && file && (
+            {useCellMapping && file && (
               <div className="mt-4 rounded-xl border border-white/10 bg-slate-900/40 p-4">
                 <div className="mb-2 text-xs font-medium text-slate-300">
                   Extraction preview (read from Sheet + Cell → will be stored in DB)
@@ -334,6 +533,12 @@ export function UploadPage() {
                   <div className="py-4 text-center text-sm text-slate-400">Loading preview…</div>
                 ) : previewItems && previewItems.length > 0 ? (
                   <>
+                    <HierarchyExpandControls
+                      canExpand={previewTableView.codesWithChildren.size > 0}
+                      onExpandAll={() => setPreviewTableExpanded(new Set(previewTableView.codesWithChildren))}
+                      onCollapseAll={() => setPreviewTableExpanded(new Set())}
+                      className="mb-2"
+                    />
                     <div className="max-h-48 overflow-auto">
                       <table className="w-full text-left text-xs">
                         <thead className="sticky top-0 bg-slate-900 text-slate-400">
@@ -346,15 +551,31 @@ export function UploadPage() {
                           </tr>
                         </thead>
                         <tbody className="text-slate-300">
-                          {previewItems.map((it, i) => (
-                            <tr key={i} className={`border-t border-white/5 ${it.value == null ? "bg-amber-500/5" : ""}`}>
-                              <td className="py-1.5 pr-2 font-mono">{it.code}</td>
-                              <td className="py-1.5 pr-2 truncate max-w-[120px]">{it.description ?? "—"}</td>
-                              <td className="py-1.5 pr-2">{it.sheet_name}</td>
-                              <td className="py-1.5 pr-2 font-mono">{it.cell_ref}</td>
-                              <td className="py-1.5 font-mono text-sky-200">{formatValueToSigFigs(it.value) || "—"}</td>
-                            </tr>
-                          ))}
+                          {previewTableView.flat.map(({ row: it, depth }) => {
+                            const hasKids = previewTableView.codesWithChildren.has(it.code);
+                            const isOpen = previewTableView.expandedForWalk.has(it.code);
+                            return (
+                              <tr
+                                key={`${it.code}-${it.sheet_name}-${it.cell_ref}`}
+                                className={`border-t border-white/5 ${it.value == null ? "bg-amber-500/5" : ""}`}
+                              >
+                                <td className="py-1.5 pr-2 font-mono">
+                                  <HierarchyCodeCell
+                                    code={it.code}
+                                    depth={depth}
+                                    hasChildren={hasKids}
+                                    isExpanded={isOpen}
+                                    onToggle={() => togglePreviewTableRow(it.code)}
+                                    textClassName="font-mono text-slate-300"
+                                  />
+                                </td>
+                                <td className="max-w-[120px] truncate py-1.5 pr-2">{it.description ?? "—"}</td>
+                                <td className="py-1.5 pr-2">{it.sheet_name}</td>
+                                <td className="py-1.5 pr-2 font-mono">{it.cell_ref}</td>
+                                <td className="py-1.5 font-mono text-sky-200">{formatValueToSigFigs(it.value) || "—"}</td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>

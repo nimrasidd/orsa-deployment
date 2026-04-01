@@ -4,7 +4,7 @@ export type UserOut = {
   id: string;
   email: string;
   name: string;
-  company_id: string;
+  company_id: string | null;
   company_name: string | null;
   /** Full app access; can view all companies' data and manage users. */
   is_admin?: boolean;

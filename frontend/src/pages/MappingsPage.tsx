@@ -9,13 +9,17 @@ import {
   listMappings
 } from "../api/mappings";
 import { listCompanyModels, createCompanyModel, type CompanyModelOut } from "../api/companyModels";
+import { useAuth } from "../auth/AuthContext";
 import { Badge } from "../components/Badge";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
 import { Input } from "../components/Input";
 import type { MappingItemOut, MappingOut } from "../types";
+import { HierarchyCodeCell } from "../components/HierarchyCodeCell";
+import { HierarchyExpandControls } from "../components/HierarchyExpandControls";
 import { MappingTreeDiagram, buildMappingTree } from "../components/MappingTreeDiagram";
 import { Segmented } from "../components/Segmented";
+import { computeHierarchyTableView } from "../lib/hierarchyTable";
 import { CheckCircle2, Eye, FileSpreadsheet, MapPin, Plus, Trash2, UploadCloud, XCircle } from "lucide-react";
 import { cn } from "../lib/cn";
 function formatDate(iso: string) {
@@ -37,6 +41,7 @@ function formatCreatedBy(m: CompanyModelOut): string {
 }
 
 export function MappingsPage() {
+  const { user } = useAuth();
   const [loading, setLoading] = React.useState(true);
   const [mappings, setMappings] = React.useState<MappingOut[]>([]);
   const [showUpload, setShowUpload] = React.useState(false);
@@ -61,6 +66,7 @@ export function MappingsPage() {
   const [compareLeftItems, setCompareLeftItems] = React.useState<MappingItemOut[]>([]);
   const [compareRightItems, setCompareRightItems] = React.useState<MappingItemOut[]>([]);
   const [compareLoading, setCompareLoading] = React.useState(false);
+  const [mappingViewTableExpanded, setMappingViewTableExpanded] = React.useState<Set<string>>(() => new Set());
 
   const dz = useDropzone({
     accept: {
@@ -88,8 +94,18 @@ export function MappingsPage() {
   }
 
   React.useEffect(() => {
-    listCompanyModels().then(setCompanyModels).catch(() => setCompanyModels([]));
-  }, []);
+    if (!user) return;
+    listCompanyModels()
+      .then((data) => {
+        const arr = Array.isArray(data) ? data : [];
+        setCompanyModels(arr);
+        setModelId((mid) => (mid && arr.some((m) => m.id === mid) ? mid : ""));
+      })
+      .catch(() => {
+        setCompanyModels([]);
+        setModelId("");
+      });
+  }, [user?.id, user?.is_admin]);
 
   React.useEffect(() => {
     if (modelId) void load();
@@ -133,6 +149,33 @@ export function MappingsPage() {
       cancelled = true;
     };
   }, [tab, viewMappingId]);
+
+  React.useEffect(() => {
+    setMappingViewTableExpanded(new Set());
+  }, [viewMappingId]);
+
+  const mappingViewRows = React.useMemo(
+    () =>
+      viewItems.map((it) => ({
+        ...it,
+        parent_code: it.parent_code?.trim() || null
+      })),
+    [viewItems]
+  );
+
+  const mappingTableView = React.useMemo(
+    () => computeHierarchyTableView(mappingViewRows, mappingViewRows, mappingViewTableExpanded, false),
+    [mappingViewRows, mappingViewTableExpanded]
+  );
+
+  const toggleMappingTableRow = React.useCallback((code: string) => {
+    setMappingViewTableExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(code)) next.delete(code);
+      else next.add(code);
+      return next;
+    });
+  }, []);
 
   // Load compare items when in compare mode
   React.useEffect(() => {
@@ -209,7 +252,9 @@ export function MappingsPage() {
         model_id: modelId,
         notes: notes.trim() ? notes.trim() : undefined
       });
-      toast.success("Mapping created", { description: name.trim() });
+      toast.success("Mapping created", {
+        description: `${created.name} v${created.version} — set as active mapping for this model.`
+      });
       setShowUpload(false);
       setFile(null);
       setName("");
@@ -255,7 +300,15 @@ export function MappingsPage() {
     }
   }
 
-  const activeMapping = Array.isArray(mappings) ? mappings.find((m) => m.is_active) : undefined;
+  /** Prefer newest upload if multiple rows still show active (legacy data). */
+  const activeMapping = React.useMemo(() => {
+    if (!Array.isArray(mappings)) return undefined;
+    const actives = mappings.filter((m) => m.is_active);
+    if (actives.length === 0) return undefined;
+    return [...actives].sort(
+      (a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime()
+    )[0];
+  }, [mappings]);
   const viewMapping = mappings.find((m) => m.id === viewMappingId);
 
   function openView(mappingId?: string) {
@@ -296,7 +349,7 @@ export function MappingsPage() {
       {tab === "models" && (
         <Card
           title="Models"
-          subtitle="Create a model for your company, then upload its mapping in the Mappings tab."
+          subtitle="Mapping models are shared: every company can use them. Upload the Excel mapping in the Mappings tab."
         >
           <div className="space-y-4">
             <div className="flex flex-wrap items-end gap-3">
@@ -325,7 +378,9 @@ export function MappingsPage() {
               )}
             </div>
             <div className="rounded-lg border border-white/10">
-              <div className="border-b border-white/10 px-4 py-2 text-xs font-medium text-slate-400">Your company models</div>
+              <div className="border-b border-white/10 px-4 py-2 text-xs font-medium text-slate-400">
+                Available mapping models
+              </div>
               <div className="max-h-[min(28rem,60vh)] overflow-auto [scrollbar-gutter:stable] [scrollbar-width:thin]">
                 {companyModels.length === 0 ? (
                   <div className="py-4 text-center text-sm text-slate-500">No models yet. Create one above.</div>
@@ -548,29 +603,49 @@ export function MappingsPage() {
               />
             </div>
           ) : (
-            <div className="max-h-[min(28rem,60vh)] overflow-auto rounded-lg border border-white/10 [scrollbar-gutter:stable] [scrollbar-width:thin]">
-              <table className="w-full min-w-[40rem] text-left text-sm">
-                <thead className="sticky top-0 z-[1] bg-slate-950/95 text-xs text-slate-400 backdrop-blur-sm">
-                  <tr className="border-b border-white/10 [&>th]:px-3 [&>th]:pb-3 [&>th]:pt-3 [&>th]:font-medium">
-                    <th>Code</th>
-                    <th>Description</th>
-                    <th>Sheet</th>
-                    <th>Cell Reference</th>
-                    <th>Level</th>
-                  </tr>
-                </thead>
-                <tbody className="text-slate-200">
-                  {viewItems.map((item) => (
-                    <tr key={item.id} className="border-t border-white/10 [&>td]:py-3">
-                      <td className="pr-4 font-mono text-sky-200">{item.code}</td>
-                      <td className="pr-4 text-slate-300">{item.description ?? "—"}</td>
-                      <td className="pr-4 text-slate-300">{item.sheet_name}</td>
-                      <td className="pr-4 font-mono text-slate-300">{item.cell_ref}</td>
-                      <td className="pr-4 text-slate-400">{item.level}</td>
+            <div className="space-y-3">
+              <HierarchyExpandControls
+                canExpand={mappingTableView.codesWithChildren.size > 0}
+                onExpandAll={() => setMappingViewTableExpanded(new Set(mappingTableView.codesWithChildren))}
+                onCollapseAll={() => setMappingViewTableExpanded(new Set())}
+              />
+              <div className="max-h-[min(28rem,60vh)] overflow-auto rounded-lg border border-white/10 [scrollbar-gutter:stable] [scrollbar-width:thin]">
+                <table className="w-full min-w-[40rem] text-left text-sm">
+                  <thead className="sticky top-0 z-[1] bg-slate-950/95 text-xs text-slate-400 backdrop-blur-sm">
+                    <tr className="border-b border-white/10 [&>th]:px-3 [&>th]:pb-3 [&>th]:pt-3 [&>th]:font-medium">
+                      <th>Code</th>
+                      <th>Description</th>
+                      <th>Sheet</th>
+                      <th>Cell Reference</th>
+                      <th>Level</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="text-slate-200">
+                    {mappingTableView.flat.map(({ row: item, depth }) => {
+                      const hasKids = mappingTableView.codesWithChildren.has(item.code);
+                      const isOpen = mappingTableView.expandedForWalk.has(item.code);
+                      return (
+                        <tr key={item.id} className="border-t border-white/10 [&>td]:py-3">
+                          <td className="pr-4 font-mono text-sky-200">
+                            <HierarchyCodeCell
+                              code={item.code}
+                              depth={depth}
+                              hasChildren={hasKids}
+                              isExpanded={isOpen}
+                              onToggle={() => toggleMappingTableRow(item.code)}
+                              textClassName="font-mono text-sky-200"
+                            />
+                          </td>
+                          <td className="pr-4 text-slate-300">{item.description ?? "—"}</td>
+                          <td className="pr-4 text-slate-300">{item.sheet_name}</td>
+                          <td className="pr-4 font-mono text-slate-300">{item.cell_ref}</td>
+                          <td className="pr-4 text-slate-400">{item.level}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </Card>
@@ -579,7 +654,7 @@ export function MappingsPage() {
       {tab === "list" && showUpload && (
         <Card
           title="Upload Mapping Excel"
-          subtitle="Upload a file with columns: Code, Description, Sheet, Cell Reference"
+          subtitle="Columns: Code, Description, Sheet, Cell Reference. Versions are numbered per model (v1, v2, …) in upload order. New uploads become the active mapping; use Activate in the list to choose an older config."
         >
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-3">
@@ -591,7 +666,7 @@ export function MappingsPage() {
                   onChange={(e) => setName(e.target.value)}
                 />
                 <div className="mt-2 text-xs text-slate-400">
-                  A descriptive name for this mapping configuration.
+                  Descriptive label for this file; the version number is assigned automatically per model.
                 </div>
               </div>
 

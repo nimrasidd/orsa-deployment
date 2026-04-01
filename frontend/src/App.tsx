@@ -62,7 +62,14 @@ export function App() {
             <Route index element={<Dashboard />} />
             <Route path="reports" element={<ReportsPage />} />
             <Route path="upload" element={<UploadPage />} />
-            <Route path="mappings" element={<MappingsPage />} />
+            <Route
+              path="mappings"
+              element={
+                <AdminRoute>
+                  <MappingsPage />
+                </AdminRoute>
+              }
+            />
             <Route path="models" element={<ModelsPage />} />
             <Route
               path="settings"

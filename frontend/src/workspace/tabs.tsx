@@ -30,10 +30,10 @@ function keyFromPath(path: string) {
 
 function defaultTitleForPath(path: string) {
   if (path === "/") return "Dashboard";
-  if (path === "/reports") return "Reports";
-  if (path === "/upload") return "Upload";
+  if (path === "/reports") return "Upload";
+  if (path === "/upload") return "Upload Excel";
   if (path === "/mappings") return "Mappings";
-  if (path === "/models") return "Models";
+  if (path === "/models") return "Compare reports";
   if (path === "/settings") return "Settings";
   if (path.startsWith("/uploads/")) return "Report";
   if (path.startsWith("/compare/")) return "Compare";
@@ -72,7 +72,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     const initial: WorkspaceState = {
       tabs: [
         { id: keyFromPath("/"), path: "/", title: "Dashboard", pinned: true },
-        { id: keyFromPath("/upload"), path: "/upload", title: "Upload", pinned: false }
+        { id: keyFromPath("/reports"), path: "/reports", title: "Upload", pinned: false }
       ],
       activeId: keyFromPath("/")
     };

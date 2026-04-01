@@ -32,13 +32,18 @@ export type UploadPreviewItem = {
   value: string | null;
 };
 
-export async function previewUpload(file: File, modelId?: string): Promise<{
+export async function previewUpload(
+  file: File,
+  modelId?: string,
+  mappingConfigId?: string
+): Promise<{
   items: UploadPreviewItem[];
   file_sheets?: string[];
 }> {
   const form = new FormData();
   form.append("file", file);
   if (modelId) form.append("model_id", modelId);
+  if (mappingConfigId) form.append("mapping_config_id", mappingConfigId);
   return apiFetch<{ items: UploadPreviewItem[]; file_sheets?: string[] }>(`/uploads/preview`, {
     method: "POST",
     body: form
@@ -50,9 +55,9 @@ export async function createUpload(input: {
   report_key: string;
   notes?: string;
   use_mapping?: boolean;
+  mapping_config_id?: string;
   region_id?: string;
   country_id?: string;
-  model_id?: string;
   model_id?: string;
   company_id?: string;
   report_year?: number;
@@ -63,9 +68,9 @@ export async function createUpload(input: {
   form.append("report_key", input.report_key);
   if (input.notes) form.append("notes", input.notes);
   form.append("use_mapping", String(input.use_mapping ?? true));
+  if (input.mapping_config_id) form.append("mapping_config_id", input.mapping_config_id);
   if (input.region_id) form.append("region_id", input.region_id);
   if (input.country_id) form.append("country_id", input.country_id);
-  if (input.model_id) form.append("model_id", input.model_id);
   if (input.model_id) form.append("model_id", input.model_id);
   if (input.company_id) form.append("company_id", input.company_id);
   if (input.report_year != null) form.append("report_year", String(input.report_year));
@@ -74,6 +79,12 @@ export async function createUpload(input: {
   return apiFetch<UploadOut>(`/uploads`, {
     method: "POST",
     body: form
+  });
+}
+
+export async function deleteUpload(uploadId: string): Promise<void> {
+  await apiFetch(`/uploads/${encodeURIComponent(uploadId)}`, {
+    method: "DELETE"
   });
 }
 

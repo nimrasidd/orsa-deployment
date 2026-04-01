@@ -200,24 +200,31 @@ def save_mapping_to_db(
     """
     Save a mapping configuration to the database. Single table: each row = one Code → Sheet, Cell.
 
+    Version is assigned per model: the next integer after the highest version already stored for that
+    model (any mapping name), so the first config is v1, the second v2, etc.
+
     Returns: config_id (used as mapping id)
     """
     config_id = str(uuid4())
     now = datetime.now(timezone.utc).isoformat()
 
     if isinstance(conn, sqlite3.Connection):
-        model_clause = "model_id is null" if model_id is None else "model_id = :mid"
-        params = {"name": name}
         if model_id:
-            params["mid"] = model_id
-        cur = conn.execute(
-            f"select coalesce(max(version), 0) + 1 as next_version from mapping where name = :name and {model_clause}",
-            params,
-        )
+            cur = conn.execute(
+                "select coalesce(max(version), 0) + 1 as next_version from mapping where model_id = :mid",
+                {"mid": model_id},
+            )
+        else:
+            cur = conn.execute(
+                "select coalesce(max(version), 0) + 1 as next_version from mapping where model_id is null",
+            )
         row = cur.fetchone()
         version = int(row["next_version"] if row else 1)
 
-        conn.execute(f"update mapping set is_active = 0 where name = :name and {model_clause}", params)
+        if model_id:
+            conn.execute("update mapping set is_active = 0 where model_id = :mid", {"mid": model_id})
+        else:
+            conn.execute("update mapping set is_active = 0 where model_id is null")
 
         for item in mapping_items:
             conn.execute(
@@ -246,16 +253,24 @@ def save_mapping_to_db(
 
     with conn.transaction():
         with conn.cursor() as cur:
-            cur.execute(
-                "select coalesce(max(version), 0) + 1 as next_version from public.mapping where name = %(name)s and (model_id is not distinct from %(model_id)s)",
-                {"name": name, "model_id": model_id},
-            )
+            if model_id:
+                cur.execute(
+                    "select coalesce(max(version), 0) + 1 as next_version from public.mapping where model_id = %(mid)s::uuid",
+                    {"mid": model_id},
+                )
+            else:
+                cur.execute(
+                    "select coalesce(max(version), 0) + 1 as next_version from public.mapping where model_id is null",
+                )
             version = int(cur.fetchone()["next_version"])
 
-            cur.execute(
-                "update public.mapping set is_active = false where name = %(name)s and (model_id is not distinct from %(model_id)s)",
-                {"name": name, "model_id": model_id},
-            )
+            if model_id:
+                cur.execute(
+                    "update public.mapping set is_active = false where model_id = %(mid)s::uuid",
+                    {"mid": model_id},
+                )
+            else:
+                cur.execute("update public.mapping set is_active = false where model_id is null")
 
             for item in mapping_items:
                 cur.execute(
@@ -282,15 +297,72 @@ def save_mapping_to_db(
     return config_id
 
 
+def get_mapping_config_model_id(conn: Any, config_id: str) -> str | None:
+    """Return the model_id for a mapping config, or None if config does not exist."""
+    if isinstance(conn, sqlite3.Connection):
+        cur = conn.execute(
+            "select model_id from mapping where config_id = ? limit 1",
+            (config_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+        d = dict(zip(row.keys(), row))  # type: ignore[arg-type]
+        mid = d.get("model_id")
+        return str(mid) if mid is not None else None
+    with conn.cursor() as cur:
+        cur.execute(
+            "select model_id from public.mapping where config_id = %(id)s limit 1",
+            {"id": config_id},
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+        mid = row["model_id"]
+        return str(mid) if mid is not None else None
+
+
+def fetch_mapping_items_by_config_id(conn: Any, config_id: str) -> list[dict]:
+    """All line items for one mapping configuration (config_id)."""
+    if isinstance(conn, sqlite3.Connection):
+        cur = conn.execute(
+            """
+            select id, config_id as mapping_id, code, description, sheet_name, cell_ref, level, parent_code, uploaded_at as created_at
+            from mapping
+            where config_id = ?
+            order by level, code
+            """,
+            (config_id,),
+        )
+        return [dict(r) for r in cur.fetchall()]
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            select id, config_id as mapping_id, code, description, sheet_name, cell_ref, level, parent_code, uploaded_at as created_at
+            from public.mapping
+            where config_id = %(cid)s
+            order by level, code
+            """,
+            {"cid": config_id},
+        )
+        return list(cur.fetchall())
+
+
 def get_active_mapping_items(conn: Any, model_id: str | None = None) -> list[dict]:
-    """Get all items from the active mapping, optionally for a specific model."""
+    """Get all items from the active mapping for a model (at most one active config per model)."""
     if isinstance(conn, sqlite3.Connection):
         if model_id:
             cur = conn.execute(
                 """
                 select id, config_id as mapping_id, code, description, sheet_name, cell_ref, level, parent_code, uploaded_at as created_at
                 from mapping
-                where is_active = 1 and model_id = ?
+                where config_id = (
+                    select config_id from mapping
+                    where is_active = 1 and model_id = ?
+                    group by config_id
+                    order by max(uploaded_at) desc
+                    limit 1
+                )
                 order by level, code
                 """,
                 (model_id,),
@@ -322,7 +394,13 @@ def get_active_mapping_items(conn: Any, model_id: str | None = None) -> list[dic
                 """
                 select id, config_id as mapping_id, code, description, sheet_name, cell_ref, level, parent_code, uploaded_at as created_at
                 from public.mapping
-                where is_active = true and model_id = %(model_id)s
+                where config_id = (
+                    select config_id from public.mapping
+                    where is_active = true and model_id = %(model_id)s::uuid
+                    group by config_id
+                    order by max(uploaded_at) desc
+                    limit 1
+                )
                 order by level, code
                 """,
                 {"model_id": model_id},

@@ -120,14 +120,12 @@ export function MappingTreeDiagram({ roots, expanded: controlledExpanded, onExpa
 
   const toggleExpanded = React.useCallback(
     (code: string) => {
-      setExpanded((prev) => {
-        const next = new Set(prev);
-        if (next.has(code)) next.delete(code);
-        else next.add(code);
-        return next;
-      });
+      const next = new Set(expanded);
+      if (next.has(code)) next.delete(code);
+      else next.add(code);
+      setExpanded(next);
     },
-    [setExpanded]
+    [expanded, setExpanded]
   );
 
   if (roots.length === 0) return null;
@@ -218,13 +216,17 @@ function DiagramGroup({
   const hasChildren = node.children.length > 0;
   const isExpanded = expanded.has(node.item.code);
 
-  const handleClick = React.useCallback(() => {
-    if (hasChildren) {
-      onToggle(node.item.code);
-    } else if (onSelect) {
-      onSelect(node.item);
-    }
-  }, [hasChildren, node.item, onToggle, onSelect]);
+  const handleClick = React.useCallback(
+    (e: React.MouseEvent<SVGGElement>) => {
+      e.stopPropagation();
+      if (hasChildren) {
+        onToggle(node.item.code);
+      } else if (onSelect) {
+        onSelect(node.item);
+      }
+    },
+    [hasChildren, node.item, onToggle, onSelect]
+  );
 
   return (
     <g onClick={handleClick} style={{ cursor: "pointer" }}>
@@ -269,6 +271,7 @@ function DiagramGroup({
         fill="#e2e8f0"
         fontSize="12"
         fontFamily="ui-sans-serif, system-ui, sans-serif"
+        style={{ pointerEvents: "none" }}
       >
         {(() => {
           const s = node.item.description ?? node.item.code;
@@ -283,6 +286,7 @@ function DiagramGroup({
           fill="#94a3b8"
           fontSize="10"
           fontFamily="ui-monospace, monospace"
+          style={{ pointerEvents: "none" }}
         >
           {[node.item.sheet_name, node.item.cell_ref].filter(Boolean).join(" → ")}
         </text>

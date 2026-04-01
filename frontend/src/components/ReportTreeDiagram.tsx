@@ -83,14 +83,12 @@ export function ReportTreeDiagram({ roots, expanded: controlledExpanded, onExpan
 
   const toggleExpanded = React.useCallback(
     (code: string) => {
-      setExpanded((prev) => {
-        const next = new Set(prev);
-        if (next.has(code)) next.delete(code);
-        else next.add(code);
-        return next;
-      });
+      const next = new Set(expanded);
+      if (next.has(code)) next.delete(code);
+      else next.add(code);
+      setExpanded(next);
     },
-    [setExpanded]
+    [expanded, setExpanded]
   );
 
   // Inline expand/collapse so left and right panels can both expand at the same time (no modal)
@@ -196,17 +194,21 @@ function DiagramGroup({
   const hasChildren = node.children.length > 0;
   const isExpanded = expanded.has(node.code);
 
-  const handleClick = React.useCallback(() => {
-    if (hasChildren) {
-      if (onExpandableClick) {
-        onExpandableClick(node);
-      } else {
-        onToggle(node.code);
+  const handleClick = React.useCallback(
+    (e: React.MouseEvent<SVGGElement>) => {
+      e.stopPropagation();
+      if (hasChildren) {
+        if (onExpandableClick) {
+          onExpandableClick(node);
+        } else {
+          onToggle(node.code);
+        }
+      } else if (onSelect) {
+        onSelect(node);
       }
-    } else if (onSelect) {
-      onSelect(node);
-    }
-  }, [hasChildren, node, onToggle, onExpandableClick, onSelect]);
+    },
+    [hasChildren, node, onToggle, onExpandableClick, onSelect]
+  );
 
   const valueStr = node.value != null && node.value !== "" ? formatValueToSigFigs(node.value) : null;
 
@@ -268,6 +270,7 @@ function DiagramGroup({
           fill="#94a3b8"
           fontSize="10"
           fontFamily="ui-monospace, monospace"
+          style={{ pointerEvents: "none" }}
         >
           {valueStr.length > 24 ? valueStr.slice(0, 23) + "…" : valueStr}
         </text>

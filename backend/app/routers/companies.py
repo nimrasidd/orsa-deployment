@@ -109,6 +109,8 @@ def list_companies(
     """
     rid = region_id
     if user and not user.is_admin:
+        if not user.company_id:
+            return []
         row = _get_company_by_id(db, user.company_id)
         return [CompanyOut(**dict(row))] if row else []
     return _list_companies(db, rid)
@@ -139,6 +141,16 @@ def create_company(
                 "insert into companies (id, name, region_id, country_id) values (?, ?, ?, ?)",
                 (company_id, name, body.region_id, body.country_id),
             )
+            try:
+                db.execute(
+                    """
+                    insert or ignore into company_model (company_id, model_id)
+                    select ?, id from models
+                    """,
+                    (company_id,),
+                )
+            except sqlite3.OperationalError:
+                pass
             db.commit()
         except Exception as e:
             db.rollback()
@@ -166,6 +178,17 @@ def create_company(
                         "country_id": body.country_id,
                     },
                 )
+                try:
+                    cur.execute(
+                        """
+                        insert into public.company_model (company_id, model_id)
+                        select %(cid)s::uuid, m.id from public.models m
+                        on conflict do nothing
+                        """,
+                        {"cid": company_id},
+                    )
+                except Exception:
+                    pass
             except Exception as e:
                 msg = str(e).lower()
                 if "unique" in msg or "duplicate" in msg:

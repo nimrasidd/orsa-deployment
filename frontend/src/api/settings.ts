@@ -5,7 +5,7 @@ export type UserListOut = {
   id: string;
   email: string;
   name: string;
-  company_id: string;
+  company_id: string | null;
   company_name: string | null;
   created_at: string | null;
 };

@@ -14,29 +14,89 @@ from .config import settings
 _sqlite_initialized = False
 
 
-def _ensure_models_migration(conn: sqlite3.Connection) -> None:
-    """Migrate company_models -> models for existing SQLite DBs."""
-    cur = conn.execute("select name from sqlite_master where type='table' and name='company_models'")
+def _sqlite_ensure_company_model_m2m(conn: sqlite3.Connection) -> None:
+    """Global mapping models + company_model junction. Migrate legacy models.company_id."""
+    cur = conn.execute("select name from sqlite_master where type='table' and name='models'")
     if not cur.fetchone():
-        return  # no company_models, nothing to migrate
-    # Create models if not exists
+        return
     conn.execute(
         """
-        create table if not exists models (
-          id text primary key,
+        create table if not exists company_model (
           company_id text not null references companies(id) on delete cascade,
-          created_by_user_id text references users(id) on delete set null,
-          name text not null,
-          created_at text not null default (datetime('now')),
-          unique(company_id, name)
+          model_id text not null references models(id) on delete cascade,
+          primary key (company_id, model_id)
         )
         """
     )
-    # Migrate company_models -> models
+    cur = conn.execute("pragma table_info(models)")
+    col_names = {r[1] for r in cur.fetchall()}
+    conn.execute("PRAGMA foreign_keys=OFF")
+    try:
+        if "company_id" in col_names:
+            conn.execute(
+                """
+                insert or ignore into company_model (company_id, model_id)
+                select company_id, id from models where company_id is not null
+                """
+            )
+            conn.execute(
+                """
+                insert or ignore into company_model (company_id, model_id)
+                select c.id, m.id from companies c cross join models m
+                """
+            )
+            conn.execute("alter table models rename to models_old")
+            conn.execute(
+                """
+                create table models (
+                  id text primary key,
+                  created_by_user_id text references users(id) on delete set null,
+                  name text not null,
+                  created_at text not null default (datetime('now'))
+                )
+                """
+            )
+            conn.execute(
+                """
+                insert into models (id, created_by_user_id, name, created_at)
+                select id, created_by_user_id, name, created_at from models_old
+                """
+            )
+            conn.execute("drop table models_old")
+
+        try:
+            conn.execute(
+                """
+                insert or ignore into company_model (company_id, model_id)
+                select c.id, m.id from companies c cross join models m
+                """
+            )
+        except sqlite3.OperationalError:
+            pass
+    finally:
+        conn.execute("PRAGMA foreign_keys=ON")
+
+
+def _ensure_models_migration(conn: sqlite3.Connection) -> None:
+    """Migrate legacy company_models table into models + company_model (M2M)."""
+    cur = conn.execute("select name from sqlite_master where type='table' and name='company_models'")
+    if not cur.fetchone():
+        return
     conn.execute(
-        "insert or ignore into models (id, company_id, created_by_user_id, name, created_at) "
-        "select id, company_id, null, name, datetime('now') from company_models"
+        """
+        insert or ignore into models (id, created_by_user_id, name, created_at)
+        select id, null, name, datetime('now') from company_models
+        """
     )
+    try:
+        conn.execute(
+            """
+            insert or ignore into company_model (company_id, model_id)
+            select company_id, id from company_models
+            """
+        )
+    except sqlite3.OperationalError:
+        pass
     # mapping.company_model_id -> mapping.model_id (models.id = company_models.id)
     try:
         conn.execute("alter table mapping add column model_id_new text references models(id)")
@@ -54,6 +114,49 @@ def _ensure_models_migration(conn: sqlite3.Connection) -> None:
         pass
     try:
         conn.execute("drop table company_models")
+    except sqlite3.OperationalError:
+        pass
+
+
+def _sqlite_migrate_users_company_nullable(conn: sqlite3.Connection) -> None:
+    """Allow users.company_id to be null (global admins). Idempotent."""
+    cur = conn.execute("select name from sqlite_master where type='table' and name='users'")
+    if not cur.fetchone():
+        return
+    cur = conn.execute("pragma table_info(users)")
+    col = next((r for r in cur.fetchall() if r[1] == "company_id"), None)
+    if col is None:
+        return
+    if int(col[3]) == 0:
+        return  # already nullable
+    conn.execute("PRAGMA foreign_keys=OFF")
+    conn.execute(
+        """
+        create table if not exists users__new (
+          id text primary key,
+          email text not null unique,
+          password_hash text not null,
+          name text not null,
+          company_id text references companies(id),
+          created_at text not null,
+          is_admin integer not null default 0
+        )
+        """
+    )
+    cur = conn.execute("pragma table_info(users)")
+    old_cols = {r[1] for r in cur.fetchall()}
+    if "is_admin" in old_cols:
+        conn.execute("insert into users__new select * from users")
+    else:
+        conn.execute(
+            "insert into users__new (id, email, password_hash, name, company_id, created_at, is_admin) "
+            "select id, email, password_hash, name, company_id, created_at, 0 from users"
+        )
+    conn.execute("drop table users")
+    conn.execute("alter table users__new rename to users")
+    conn.execute("PRAGMA foreign_keys=ON")
+    try:
+        conn.execute("create unique index if not exists idx_users_email_unique on users(email)")
     except sqlite3.OperationalError:
         pass
 
@@ -83,6 +186,8 @@ def _ensure_users_columns(conn: sqlite3.Connection) -> None:
 
 def _ensure_sqlite_uploads_columns(conn: sqlite3.Connection) -> None:
     """Add new columns to uploads if missing (for existing SQLite DBs)."""
+    _ensure_users_columns(conn)
+
     for col, typ in [
         ("mapping_config_id", "text"),
         ("region_id", "text"),
@@ -138,38 +243,39 @@ def _ensure_sqlite_uploads_columns(conn: sqlite3.Connection) -> None:
                 ("co-Demo", "Demo Company", "r-APAC", "c-PK"),
             ],
         )
-        # Seed default user: admin@sir.com / password123 (pre-computed bcrypt hash)
+        # Seed default users (pre-computed bcrypt for password123)
         from datetime import datetime, timezone
         admin_hash = "$2b$12$qwBrFToCIo7RYw/zwhvXoOPhw9YFra.WU5AAqGtk3MiEwuTIidGaa"
+        now = datetime.now(timezone.utc).isoformat()
         conn.execute(
-            "insert or ignore into users (id, email, password_hash, name, company_id, created_at) values (?, ?, ?, ?, ?, ?)",
-            ("u-admin", "admin@sir.com", admin_hash, "Admin User", "co-SIR", datetime.now(timezone.utc).isoformat()),
+            "insert or ignore into users (id, email, password_hash, name, company_id, created_at, is_admin) values (?, ?, ?, ?, ?, ?, ?)",
+            ("u-admin", "admin@sir.com", admin_hash, "Admin User", None, now, 1),
+        )
+        conn.execute(
+            "insert or ignore into users (id, email, password_hash, name, company_id, created_at, is_admin) values (?, ?, ?, ?, ?, ?, ?)",
+            ("u-company", "company@demo.com", admin_hash, "Company User", "co-Demo", now, 0),
         )
 
-    # Ensure admin user exists and has correct hash (idempotent)
+    # Ensure admin (no company) + demo company user exist and hashes stay in sync (idempotent)
     admin_hash = "$2b$12$qwBrFToCIo7RYw/zwhvXoOPhw9YFra.WU5AAqGtk3MiEwuTIidGaa"
     from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
     conn.execute(
-        "insert or ignore into users (id, email, password_hash, name, company_id, created_at) "
-        "select 'u-admin', 'admin@sir.com', ?, 'Admin User', id, ? from companies where id = 'co-SIR' limit 1",
-        (admin_hash, datetime.now(timezone.utc).isoformat()),
+        "insert or ignore into users (id, email, password_hash, name, company_id, created_at, is_admin) values (?, ?, ?, ?, ?, ?, ?)",
+        ("u-admin", "admin@sir.com", admin_hash, "Admin User", None, now, 1),
     )
-    # If co-SIR doesn't exist, try first company
-    cur = conn.execute("select count(*) from users where lower(email) = 'admin@sir.com'")
-    if cur.fetchone()[0] == 0:
-        conn.execute(
-            "insert or ignore into users (id, email, password_hash, name, company_id, created_at) "
-            "select 'u-admin', 'admin@sir.com', ?, 'Admin User', id, ? from companies limit 1",
-            (admin_hash, datetime.now(timezone.utc).isoformat()),
-        )
     conn.execute(
-        "update users set password_hash = ? where lower(email) = 'admin@sir.com'",
+        "insert or ignore into users (id, email, password_hash, name, company_id, created_at, is_admin) values (?, ?, ?, ?, ?, ?, ?)",
+        ("u-company", "company@demo.com", admin_hash, "Company User", "co-Demo", now, 0),
+    )
+    conn.execute(
+        "update users set password_hash = ?, company_id = null, is_admin = 1 where lower(email) = 'admin@sir.com'",
         (admin_hash,),
     )
-    try:
-        conn.execute("update users set is_admin = 1 where lower(email) = 'admin@sir.com'")
-    except sqlite3.OperationalError:
-        pass
+    conn.execute(
+        "update users set password_hash = ?, company_id = 'co-Demo', is_admin = 0 where lower(email) = 'company@demo.com'",
+        (admin_hash,),
+    )
 
     # Add country_id to companies if missing (for existing SQLite DBs)
     try:
@@ -254,7 +360,7 @@ def _init_sqlite(conn: sqlite3.Connection) -> None:
           email text not null unique,
           password_hash text not null,
           name text not null,
-          company_id text not null references companies(id),
+          company_id text references companies(id),
           created_at text not null,
           is_admin integer not null default 0
         )
@@ -265,11 +371,18 @@ def _init_sqlite(conn: sqlite3.Connection) -> None:
         """
         create table if not exists models (
           id text primary key,
-          company_id text not null references companies(id) on delete cascade,
           created_by_user_id text references users(id) on delete set null,
           name text not null,
-          created_at text not null default (datetime('now')),
-          unique(company_id, name)
+          created_at text not null default (datetime('now'))
+        )
+        """
+    )
+    conn.execute(
+        """
+        create table if not exists company_model (
+          company_id text not null references companies(id) on delete cascade,
+          model_id text not null references models(id) on delete cascade,
+          primary key (company_id, model_id)
         )
         """
     )
@@ -379,9 +492,11 @@ def _get_sqlite_conn(db_path: Path | None = None) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(db_path), check_same_thread=False)
     conn.row_factory = sqlite3.Row  # type: ignore[attr-defined]
+    _sqlite_migrate_users_company_nullable(conn)
     if not _sqlite_initialized:
         _init_sqlite(conn)
         _sqlite_initialized = True
+    _sqlite_ensure_company_model_m2m(conn)
     return conn
 
 

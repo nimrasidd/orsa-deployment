@@ -7,8 +7,10 @@ import { Button } from "../components/Button";
 import { Card } from "../components/Card";
 import { Input } from "../components/Input";
 import { Segmented } from "../components/Segmented";
+import { HierarchyCodeCell } from "../components/HierarchyCodeCell";
+import { HierarchyExpandControls } from "../components/HierarchyExpandControls";
 import { ReportTreeDiagram } from "../components/ReportTreeDiagram";
-import { TreeView } from "../components/TreeView";
+import { computeHierarchyTableView } from "../lib/hierarchyTable";
 import { formatValueToSigFigs } from "../lib/format";
 import type { ReportNodeOut, TreeNode } from "../types";
 import { RefreshCcw } from "lucide-react";
@@ -27,9 +29,9 @@ export function UploadDetail() {
   const [nodes, setNodes] = React.useState<ReportNodeOut[]>([]);
   const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set());
   const [search, setSearch] = React.useState("");
-  const [selected, setSelected] = React.useState<TreeNode | null>(null);
-  const [view, setView] = React.useState<"tree" | "nodes" | "diagram">("tree");
+  const [view, setView] = React.useState<"table" | "diagram">("table");
   const [debug, setDebug] = React.useState<{ node_count: number; has_nodes: boolean } | null>(null);
+  const [tableExpanded, setTableExpanded] = React.useState<Set<string>>(() => new Set());
 
   async function load() {
     if (!uploadId) return;
@@ -41,7 +43,7 @@ export function UploadDetail() {
       const exp = new Set<string>();
       collectExpandableCodes(tree.slice(0, 3), exp);
       setExpanded(exp);
-      setSelected(null);
+      setTableExpanded(new Set());
       if (tree.length === 0 && flat.length === 0) {
         getUploadDebug(uploadId)
           .then((d) => setDebug({ node_count: d.node_count, has_nodes: d.has_nodes }))
@@ -50,7 +52,7 @@ export function UploadDetail() {
         setDebug(null);
       }
     } catch (e: any) {
-      toast.error("Failed to load tree", {
+      toast.error("Failed to load report", {
         description: e?.detail ? String(e.detail) : String(e?.message ?? e)
       });
       setDebug(null);
@@ -64,20 +66,45 @@ export function UploadDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uploadId]);
 
-  function onToggle(code: string) {
-    setExpanded((prev) => {
+  const tableHierarchyRows = React.useMemo(
+    () =>
+      nodes.map((n) => ({
+        ...n,
+        parent_code: n.parent_code?.trim() || null
+      })),
+    [nodes]
+  );
+
+  const filteredTableRows = React.useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return tableHierarchyRows;
+    return tableHierarchyRows.filter((n) =>
+      `${n.code} ${n.description ?? ""}`.toLowerCase().includes(q)
+    );
+  }, [tableHierarchyRows, search]);
+
+  const tableView = React.useMemo(
+    () =>
+      computeHierarchyTableView(tableHierarchyRows, filteredTableRows, tableExpanded, search.trim() !== ""),
+    [tableHierarchyRows, filteredTableRows, tableExpanded, search]
+  );
+
+  const toggleTableRow = React.useCallback((code: string) => {
+    setTableExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(code)) next.delete(code);
       else next.add(code);
       return next;
     });
-  }
+  }, []);
+
+  const tableFlatLimited = React.useMemo(() => tableView.flat.slice(0, 500), [tableView.flat]);
 
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="text-sm font-semibold text-slate-100">Report tree</div>
+          <div className="text-sm font-semibold text-slate-100">Report</div>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-400">
             <Badge>upload: {uploadId?.slice(0, 10)}</Badge>
             <span>Explore hierarchy from your Excel upload.</span>
@@ -95,15 +122,14 @@ export function UploadDetail() {
 
       <Card
         title="Workspace"
-        subtitle={loading ? "Loading…" : "Switch between Tree and Nodes. Search applies to the active view."}
+        subtitle={loading ? "Loading…" : "Switch between Table and Diagram. Search applies to the active view."}
         actions={
               <div className="flex flex-wrap items-center gap-3">
                 <Segmented
                   value={view}
-                  onChange={(v) => setView(v as "tree" | "nodes" | "diagram")}
+                  onChange={(v) => setView(v as "table" | "diagram")}
                   items={[
-                    { value: "tree", label: "Tree" },
-                    { value: "nodes", label: "Nodes" },
+                    { value: "table", label: "Table" },
                     { value: "diagram", label: "Diagram" }
                   ]}
                 />
@@ -125,34 +151,12 @@ export function UploadDetail() {
                   roots={roots}
                   expanded={expanded}
                   onExpandedChange={setExpanded}
-                  onSelect={setSelected}
                 />
               ) : (
                 <div className="py-10 text-center text-sm text-slate-400">
-                  <p>No nodes found for this upload.</p>
+                  <p>No data for diagram view.</p>
                   {debug != null && (
-                    <p className="mt-2 text-xs text-slate-500">Debug: server reports {debug.node_count} node(s).</p>
-                  )}
-                  <Link to="/upload" className="mt-4 inline-block text-sky-400 hover:text-sky-300">
-                    Re-upload file
-                  </Link>
-                </div>
-              )
-            ) : view === "tree" ? (
-              roots.length ? (
-                <TreeView
-                  roots={roots}
-                  search={search}
-                  expanded={expanded}
-                  onToggle={onToggle}
-                  selectedCode={selected?.code}
-                  onSelect={setSelected}
-                />
-              ) : (
-                <div className="py-10 text-center text-sm text-slate-400">
-                  <p>No nodes found for this upload.</p>
-                  {debug != null && (
-                    <p className="mt-2 text-xs text-slate-500">Debug: server reports {debug.node_count} node(s).</p>
+                    <p className="mt-2 text-xs text-slate-500">Debug: server reports {debug.node_count} row(s).</p>
                   )}
                   <Link to="/upload" className="mt-4 inline-block text-sky-400 hover:text-sky-300">
                     Re-upload file
@@ -160,51 +164,72 @@ export function UploadDetail() {
                 </div>
               )
             ) : nodes.length ? (
-              <div className="overflow-auto">
-                <table className="w-full text-left text-sm">
-                  <thead className="text-xs text-slate-400">
-                    <tr className="[&>th]:pb-3 [&>th]:font-medium">
-                      <th>Code</th>
-                      <th>Level</th>
-                      <th className="hidden md:table-cell">Description</th>
-                      <th className="text-right">Value</th>
-                    </tr>
-                  </thead>
-                  <tbody className="text-slate-200">
-                    {nodes
-                      .filter((n) => {
-                        const q = search.trim().toLowerCase();
-                        if (!q) return true;
-                        return `${n.code} ${n.description ?? ""}`.toLowerCase().includes(q);
-                      })
-                      .slice(0, 500)
-                      .map((n) => (
-                        <tr key={n.id} className="border-t border-white/10 [&>td]:py-2">
-                          <td className="pr-3 font-medium">{n.code}</td>
-                          <td className="pr-3 text-slate-300">{n.level}</td>
-                          <td className="hidden pr-3 text-slate-300 md:table-cell">
-                            <span className="line-clamp-1">{n.description ?? ""}</span>
+              <div className="space-y-3">
+                <HierarchyExpandControls
+                  canExpand={tableView.codesWithChildren.size > 0}
+                  onExpandAll={() => setTableExpanded(new Set(tableView.codesWithChildren))}
+                  onCollapseAll={() => setTableExpanded(new Set())}
+                />
+                <div className="overflow-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="text-xs text-slate-400">
+                      <tr className="[&>th]:pb-3 [&>th]:font-medium">
+                        <th>Code</th>
+                        <th>Level</th>
+                        <th className="hidden md:table-cell">Description</th>
+                        <th className="text-right">Value</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-slate-200">
+                      {filteredTableRows.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="border-t border-white/10 py-8 text-center text-sm text-slate-500">
+                            No rows match your search.
                           </td>
-                          <td className="text-right text-slate-100">{formatValueToSigFigs(n.value)}</td>
                         </tr>
-                      ))}
-                  </tbody>
-                </table>
-                {nodes.length > 500 ? (
-                  <div className="mt-3 text-xs text-slate-400">
-                    Showing first 500 rows. Use search to narrow results.
-                  </div>
-                ) : null}
+                      ) : (
+                        tableFlatLimited.map(({ row: n, depth }) => {
+                          const hasKids = tableView.codesWithChildren.has(n.code);
+                          const isOpen = tableView.expandedForWalk.has(n.code);
+                          return (
+                            <tr key={n.id} className="border-t border-white/10 [&>td]:py-2">
+                              <td className="pr-3 font-medium">
+                                <HierarchyCodeCell
+                                  code={n.code}
+                                  depth={depth}
+                                  hasChildren={hasKids}
+                                  isExpanded={isOpen}
+                                  onToggle={() => toggleTableRow(n.code)}
+                                  textClassName="font-medium text-slate-100"
+                                />
+                              </td>
+                              <td className="pr-3 text-slate-300">{n.level}</td>
+                              <td className="hidden pr-3 text-slate-300 md:table-cell">
+                                <span className="line-clamp-1">{n.description ?? ""}</span>
+                              </td>
+                              <td className="text-right text-slate-100">{formatValueToSigFigs(n.value)}</td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                  {tableView.flat.length > 500 ? (
+                    <div className="mt-3 text-xs text-slate-400">
+                      Showing first 500 visible rows. Use search or collapse sections to narrow results.
+                    </div>
+                  ) : null}
+                </div>
               </div>
             ) : (
               <div className="py-10 text-center text-sm text-slate-400">
-                <p>No nodes found for this upload.</p>
+                <p>No rows for this upload.</p>
                 <p className="mt-2 text-xs">
                   This can happen if the upload failed partway (e.g. numeric overflow) or the database connection fell back to SQLite while you query Supabase.
                 </p>
                 {debug != null && (
                   <p className="mt-2 text-xs text-slate-500">
-                    Debug: server reports {debug.node_count} node(s).
+                    Debug: server reports {debug.node_count} row(s).
                   </p>
                 )}
                 <Link to="/upload" className="mt-4 inline-block text-sky-400 hover:text-sky-300">

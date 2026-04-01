@@ -299,18 +299,21 @@ export function SettingsPage() {
                     <tr key={u.id} className="border-t border-white/10">
                       <td className="px-4 py-2.5 font-medium text-slate-100">{u.name}</td>
                       <td className="px-4 py-2.5 text-slate-400">{u.email}</td>
-                      <td className="px-4 py-2.5 text-slate-300">{u.company_name ?? u.company_id}</td>
+                      <td className="px-4 py-2.5 text-slate-300">
+                        {u.company_name ?? u.company_id ?? "—"}
+                      </td>
                       <td className="px-4 py-2.5">
                         <select
-                          value={u.company_id}
+                          value={u.company_id ?? ""}
                           disabled={mappingUserId === u.id}
                           onChange={(e) => {
                             const next = e.target.value;
-                            if (next && next !== u.company_id) void handleCompanyMap(u.id, next);
+                            if (next && next !== (u.company_id ?? "")) void handleCompanyMap(u.id, next);
                           }}
                           className={`min-w-[11rem] ${selectCls}`}
                         >
-                          {!companies.some((c) => c.id === u.company_id) ? (
+                          <option value="">Not assigned</option>
+                          {u.company_id && !companies.some((c) => c.id === u.company_id) ? (
                             <option value={u.company_id}>{u.company_name ?? u.company_id}</option>
                           ) : null}
                           {companies.map((c) => (

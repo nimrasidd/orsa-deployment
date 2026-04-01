@@ -1,16 +1,16 @@
-import { BarChart3, Cpu, FileUp, FileText, LayoutDashboard, LogOut, MapPin, Settings, Shield } from "lucide-react";
+import { BarChart3, FileUp, LayoutDashboard, LogOut, MapPin, Settings, Shield } from "lucide-react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { cn } from "../lib/cn";
 import { useAuth } from "../auth/AuthContext";
 
 const navBase = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/reports", label: "Reports", icon: FileText },
-  { to: "/upload", label: "Upload Excel", icon: FileUp },
-  { to: "/mappings", label: "Mappings", icon: MapPin },
-  { to: "/models", label: "Models", icon: Cpu },
+  { to: "/reports", label: "Upload", icon: FileUp },
 ];
-const navSettings = { to: "/settings", label: "Settings", icon: Settings };
+const navAdminOnly = [
+  { to: "/mappings", label: "Mappings", icon: MapPin },
+  { to: "/settings", label: "Settings", icon: Settings },
+];
 
 export function Layout() {
   const { user, logout } = useAuth();
@@ -48,7 +48,7 @@ export function Layout() {
                 </button>
               </div>
             )}
-            {(user?.is_admin ? [...navBase, navSettings] : navBase).map((item) => {
+            {(user?.is_admin ? [...navBase, ...navAdminOnly] : navBase).map((item) => {
               const Icon = item.icon;
               return (
                 <NavLink

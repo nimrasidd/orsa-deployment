@@ -13,6 +13,22 @@ export async function listCountriesByRegion(regionId: string): Promise<CountryOu
   return apiFetch<CountryOut[]>(`/regions/${regionId}/countries`);
 }
 
+/** All countries (for filters without a region step). */
+export async function listAllCountries(): Promise<CountryOut[]> {
+  const regions = await listRegions();
+  const rlist = Array.isArray(regions) ? regions : [];
+  const batches = await Promise.all(
+    rlist.map((r) => listCountriesByRegion(r.id).catch(() => [] as CountryOut[]))
+  );
+  const flat = batches.flat();
+  const seen = new Set<string>();
+  return flat.filter((c) => {
+    if (seen.has(c.id)) return false;
+    seen.add(c.id);
+    return true;
+  });
+}
+
 export async function listModelsByCountry(countryId: string): Promise<ApplicationModelOut[]> {
   return apiFetch<ApplicationModelOut[]>(`/countries/${countryId}/models`);
 }

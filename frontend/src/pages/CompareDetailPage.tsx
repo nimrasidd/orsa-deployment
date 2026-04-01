@@ -16,11 +16,11 @@ export function CompareDetailPage() {
   if (!leftId || !rightId) {
     return (
       <div className="py-10 text-center text-sm text-slate-400">
-        <p>Missing report IDs. Go to Models → Compare and select two reports, then click &quot;Open side by side&quot;.</p>
+        <p>Missing report IDs. Go to Compare reports and select two reports, then click &quot;Open side by side&quot;.</p>
         <Button
           variant="ghost"
           className="mt-4"
-          onClick={() => navigate("/models", { state: { tab: "compare" } })}
+          onClick={() => navigate("/models")}
         >
           <ArrowLeft className="mr-1.5 h-4 w-4" />
           Back to Compare
@@ -35,12 +35,12 @@ export function CompareDetailPage() {
         <div>
           <div className="text-sm font-semibold text-slate-100">Compare side by side</div>
           <div className="mt-1 text-xs text-slate-400">
-            Left and right reports displayed in split view. Switch between Tree, Nodes, and Diagram per panel.
+            Left and right reports displayed in split view. Switch between Table and Diagram per panel.
           </div>
         </div>
         <Button
           variant="ghost"
-          onClick={() => navigate("/models", { state: { tab: "compare" } })}
+          onClick={() => navigate("/models")}
         >
           <ArrowLeft className="mr-1.5 h-4 w-4" />
           Back to Compare

@@ -155,7 +155,7 @@ export function LoginPage() {
           </button>
           {mode === "login" && (
             <p className="mt-2 text-center text-xs text-slate-500">
-              Default: admin@sir.com / password123
+              Admin: admin@sir.com · Company user: company@demo.com — password123
             </p>
           )}
         </div>
