@@ -5,10 +5,16 @@ import {
   activateMapping,
   createMapping,
   deleteMapping,
+  downloadMappingWorkbook,
   getMappingItems,
   listMappings
 } from "../api/mappings";
-import { listCompanyModels, createCompanyModel, type CompanyModelOut } from "../api/companyModels";
+import {
+  listCompanyModels,
+  createCompanyModel,
+  deleteCompanyModel,
+  type CompanyModelOut
+} from "../api/companyModels";
 import { useAuth } from "../auth/AuthContext";
 import { Badge } from "../components/Badge";
 import { Button } from "../components/Button";
@@ -20,7 +26,7 @@ import { HierarchyExpandControls } from "../components/HierarchyExpandControls";
 import { MappingTreeDiagram, buildMappingTree } from "../components/MappingTreeDiagram";
 import { Segmented } from "../components/Segmented";
 import { computeHierarchyTableView } from "../lib/hierarchyTable";
-import { CheckCircle2, Eye, FileSpreadsheet, MapPin, Plus, Trash2, UploadCloud, XCircle } from "lucide-react";
+import { CheckCircle2, Download, Eye, FileSpreadsheet, MapPin, Plus, Trash2, UploadCloud, XCircle } from "lucide-react";
 import { cn } from "../lib/cn";
 function formatDate(iso: string) {
   try {
@@ -57,6 +63,8 @@ export function MappingsPage() {
   const [showCreateModel, setShowCreateModel] = React.useState(false);
   const [newModelName, setNewModelName] = React.useState("");
   const [creatingModel, setCreatingModel] = React.useState(false);
+  const [deletingModelId, setDeletingModelId] = React.useState<string | null>(null);
+  const [mappingDownloadId, setMappingDownloadId] = React.useState<string | null>(null);
   const [viewMode, setViewMode] = React.useState<"table" | "diagram" | "compare">("table");
   const [viewMappingId, setViewMappingId] = React.useState<string | null>(null);
   const [viewItems, setViewItems] = React.useState<MappingItemOut[]>([]);
@@ -208,6 +216,53 @@ export function MappingsPage() {
     };
   }, [tab, viewMode, compareLeftId, compareRightId]);
 
+  async function handleDeleteModel(m: CompanyModelOut) {
+    if (!user?.is_admin) return;
+    if (
+      !window.confirm(
+        `Delete model “${m.name}”? All mappings for this model are removed. Uploads that used it keep data but lose model linkage. This cannot be undone.`
+      )
+    ) {
+      return;
+    }
+    setDeletingModelId(m.id);
+    try {
+      await deleteCompanyModel(m.id);
+      toast.success("Model deleted", { description: m.name });
+      if (modelId === m.id) {
+        setModelId("");
+        setMappings([]);
+        setViewMappingId(null);
+      }
+      const all = await listCompanyModels();
+      setCompanyModels(Array.isArray(all) ? all : []);
+    } catch (e: unknown) {
+      const msg =
+        e && typeof e === "object" && "message" in e
+          ? String((e as { message: unknown }).message)
+          : String(e);
+      toast.error("Failed to delete model", { description: msg });
+    } finally {
+      setDeletingModelId(null);
+    }
+  }
+
+  async function handleDownloadMapping(configId: string) {
+    setMappingDownloadId(configId);
+    try {
+      await downloadMappingWorkbook(configId);
+      toast.success("Download started");
+    } catch (e: unknown) {
+      const msg =
+        e && typeof e === "object" && "message" in e
+          ? String((e as { message: unknown }).message)
+          : String(e);
+      toast.error("Download failed", { description: msg });
+    } finally {
+      setMappingDownloadId(null);
+    }
+  }
+
   async function handleCreateModel() {
     if (!newModelName.trim()) {
       toast.error("Enter a model name.");
@@ -325,7 +380,7 @@ export function MappingsPage() {
         <div>
           <div className="text-sm font-semibold text-slate-100">Model-based Mapping</div>
           <div className="mt-1 text-xs text-slate-400">
-            Create a model, then upload its mapping Excel (Code → Sheet, Cell Reference).
+            Create a model, then upload its mapping as an .xlsx workbook (Code → Sheet, Cell Reference).
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -349,7 +404,7 @@ export function MappingsPage() {
       {tab === "models" && (
         <Card
           title="Models"
-          subtitle="Mapping models are shared: every company can use them. Upload the Excel mapping in the Mappings tab."
+          subtitle="Mapping models are shared: every company can use them. Upload an .xlsx mapping workbook in the Mappings tab."
         >
           <div className="space-y-4">
             <div className="flex flex-wrap items-end gap-3">
@@ -411,16 +466,30 @@ export function MappingsPage() {
                             {formatCreatedBy(m)}
                           </td>
                           <td className="px-4 py-2.5 text-right">
-                            <Button
-                              size="sm"
-                              variant={modelId === m.id ? "primary" : "ghost"}
-                              onClick={() => {
-                                setModelId(m.id);
-                                setTab("list");
-                              }}
-                            >
-                              {modelId === m.id ? "Selected" : "Select"}
-                            </Button>
+                            <div className="flex flex-wrap items-center justify-end gap-2">
+                              <Button
+                                size="sm"
+                                variant={modelId === m.id ? "primary" : "ghost"}
+                                onClick={() => {
+                                  setModelId(m.id);
+                                  setTab("list");
+                                }}
+                              >
+                                {modelId === m.id ? "Selected" : "Select"}
+                              </Button>
+                              {user?.is_admin ? (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-rose-400 hover:text-rose-300"
+                                  disabled={deletingModelId !== null}
+                                  onClick={() => void handleDeleteModel(m)}
+                                  title="Delete model and all its mappings"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              ) : null}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -449,7 +518,7 @@ export function MappingsPage() {
                   <option key={m.id} value={m.id}>{m.name}</option>
                 ))}
               </select>
-              <span className="text-xs text-slate-500">Upload mapping Excel for this model below.</span>
+              <span className="text-xs text-slate-500">Upload an .xlsx mapping workbook for this model below.</span>
             </div>
           ) : (
             <p className="text-sm text-slate-400">
@@ -505,6 +574,18 @@ export function MappingsPage() {
                       onClick={() => setViewMappingId(activeMapping.id)}
                     >
                       Show active
+                    </Button>
+                  ) : null}
+                  {viewMappingId ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={mappingDownloadId !== null}
+                      onClick={() => void handleDownloadMapping(viewMappingId)}
+                      title="Download this mapping as .xlsx"
+                    >
+                      <Download className="h-4 w-4" />
+                      Download .xlsx
                     </Button>
                   ) : null}
                 </div>
@@ -653,8 +734,8 @@ export function MappingsPage() {
 
       {tab === "list" && showUpload && (
         <Card
-          title="Upload Mapping Excel"
-          subtitle="Columns: Code, Description, Sheet, Cell Reference. Versions are numbered per model (v1, v2, …) in upload order. New uploads become the active mapping; use Activate in the list to choose an older config."
+          title="Upload mapping (.xlsx)"
+          subtitle="Use an Excel workbook (.xlsx or .xls) with columns: Code, Description, Sheet, Cell Reference. Versions are numbered per model (v1, v2, …). New uploads become the active mapping; use Activate in the list for an older config."
         >
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-3">
@@ -683,7 +764,7 @@ export function MappingsPage() {
             </div>
 
             <div className="space-y-3">
-              <div className="mb-2 text-xs font-medium text-slate-300">Mapping Excel file</div>
+              <div className="mb-2 text-xs font-medium text-slate-300">Mapping workbook (.xlsx / .xls)</div>
               <div
                 {...dz.getRootProps()}
                 className={cn(
@@ -704,7 +785,7 @@ export function MappingsPage() {
                     {file ? file.name : "Drop mapping Excel here"}
                   </div>
                   <div className="mt-1 text-xs text-slate-400">
-                    {file ? "Click to replace" : "or click to browse (.xlsx / .xls)"}
+                    {file ? "Click to replace" : "or click to browse — .xlsx mapping workbook"}
                   </div>
                 </div>
               </div>
@@ -732,7 +813,7 @@ export function MappingsPage() {
           <div className="py-10 text-center text-sm text-slate-400">Loading mappings…</div>
         ) : mappings.length === 0 ? (
           <div className="py-10 text-center text-sm text-slate-400">
-            No mappings yet. Upload a mapping Excel file to get started.
+            No mappings yet. Upload an .xlsx mapping workbook to get started.
           </div>
         ) : (
           <div className="max-h-[min(28rem,60vh)] overflow-auto rounded-lg border border-white/10 [scrollbar-gutter:stable] [scrollbar-width:thin]">
@@ -778,6 +859,15 @@ export function MappingsPage() {
                       <div className="flex justify-end gap-2">
                         <Button variant="ghost" size="sm" onClick={() => openView(m.id)}>
                           <Eye className="h-4 w-4" /> View
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={mappingDownloadId !== null}
+                          onClick={() => void handleDownloadMapping(m.id)}
+                          title="Download .xlsx"
+                        >
+                          <Download className="h-4 w-4" />
                         </Button>
                         {!m.is_active && (
                           <Button variant="ghost" size="sm" onClick={() => handleActivate(m.id)}>

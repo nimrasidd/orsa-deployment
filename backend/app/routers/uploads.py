@@ -283,6 +283,9 @@ async def create_upload(
     If use_mapping=True and mapping_config_id is set, that mapping is used. If use_mapping=True
     without mapping_config_id, the active mapping for the model is used. Otherwise, the file must
     contain Code, Description, Value, Sheet, Cell Reference columns.
+
+    Region and country on the saved upload are taken from the resolved company's row when present
+    (see Settings → Companies); optional form fields only apply if the company has no region/country set.
     """
     if not file.filename:
         raise HTTPException(status_code=400, detail="Missing filename")
@@ -393,13 +396,16 @@ async def create_upload(
     if not nodes:
         raise HTTPException(status_code=400, detail="No data found in file")
 
+    # Region/country on the upload row follow the company master record (Settings → Companies).
+    # One company maps to one region/country; multiple companies may share a country.
+    # Prefer DB values so uploads stay consistent even if the client omits or sends stale geo fields.
     resolved_region = (region_id or "").strip() or None
     resolved_country = (country_id or "").strip() or None
     if effective_company:
         cr, cc = _region_country_for_company(db, effective_company)
-        if not resolved_region and cr:
+        if cr:
             resolved_region = cr
-        if not resolved_country and cc:
+        if cc:
             resolved_country = cc
 
     resolved_model = (model_id or "").strip() or None

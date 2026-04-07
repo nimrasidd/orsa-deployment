@@ -56,3 +56,40 @@ export async function apiFetch<T = Json>(
   return body as T;
 }
 
+/** Authenticated GET returning raw bytes (e.g. file download). */
+export async function apiFetchBlob(
+  input: string
+): Promise<{ blob: Blob; filename?: string }> {
+  const url = input.startsWith("http") ? input : `${API_BASE}${input}`;
+  const token = getStoredToken();
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const res = await fetch(url, { method: "GET", headers });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    let detail: unknown = text;
+    try {
+      detail = text ? JSON.parse(text) : text;
+    } catch {
+      /* keep text */
+    }
+    const detailStr =
+      typeof detail === "object" && detail != null && "detail" in (detail as Record<string, unknown>)
+        ? String((detail as { detail: unknown }).detail)
+        : String(detail ?? text);
+    throw new ApiError(
+      detailStr ? `Request failed (${res.status}): ${detailStr}` : `Request failed (${res.status})`,
+      res.status,
+      detail
+    );
+  }
+
+  const cd = res.headers.get("Content-Disposition");
+  const m = cd?.match(/filename="([^"]+)"/i) ?? cd?.match(/filename\*=UTF-8''([^;]+)/i);
+  const filename = m?.[1] ? decodeURIComponent(m[1]) : undefined;
+  const blob = await res.blob();
+  return { blob, filename };
+}
+

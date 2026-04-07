@@ -5,7 +5,7 @@ import { createUpload, previewUpload } from "../api/uploads";
 import { listMappings } from "../api/mappings";
 import { listCompanyModels, type CompanyModelOut } from "../api/companyModels";
 import type { MappingOut } from "../types";
-import { listAllCountries, listCompanies, type CompanyOut, type CountryOut } from "../api/regions";
+import { listCompanies, type CompanyOut } from "../api/regions";
 import { useAuth } from "../auth/AuthContext";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
@@ -50,20 +50,12 @@ export function UploadPage() {
   const [previewFileSheets, setPreviewFileSheets] = React.useState<string[] | null>(null);
   const [previewLoading, setPreviewLoading] = React.useState(false);
   const [allCompanies, setAllCompanies] = React.useState<CompanyOut[]>([]);
-  const [allCountries, setAllCountries] = React.useState<CountryOut[]>([]);
   const [uploadCompanyId, setUploadCompanyId] = React.useState("");
-  const [uploadCountryId, setUploadCountryId] = React.useState("");
 
   React.useEffect(() => {
     listCompanies()
       .then((c) => setAllCompanies(Array.isArray(c) ? c : []))
       .catch(() => setAllCompanies([]));
-  }, []);
-
-  React.useEffect(() => {
-    listAllCountries()
-      .then((c) => setAllCountries(Array.isArray(c) ? c : []))
-      .catch(() => setAllCountries([]));
   }, []);
 
   React.useEffect(() => {
@@ -74,36 +66,6 @@ export function UploadPage() {
     const arr = allCompanies;
     setUploadCompanyId((prev) => (prev && arr.some((x) => x.id === prev) ? prev : arr[0]?.id ?? ""));
   }, [user?.is_admin, allCompanies]);
-
-  const companyLinkedCountryIds = React.useMemo(() => {
-    const s = new Set<string>();
-    for (const co of allCompanies) {
-      if (co.country_id) s.add(co.country_id);
-    }
-    return s;
-  }, [allCompanies]);
-
-  const uploadCountryOptions = React.useMemo(() => {
-    return allCountries
-      .filter((c) => companyLinkedCountryIds.has(c.id))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [allCountries, companyLinkedCountryIds]);
-
-  React.useEffect(() => {
-    if (!user?.is_admin) return;
-    const co = allCompanies.find((c) => c.id === uploadCompanyId);
-    const cid = co?.country_id;
-    if (cid && companyLinkedCountryIds.has(cid)) setUploadCountryId(cid);
-    else setUploadCountryId("");
-  }, [user?.is_admin, uploadCompanyId, allCompanies, companyLinkedCountryIds]);
-
-  React.useEffect(() => {
-    if (user?.is_admin || !user?.company_id) return;
-    const co = allCompanies.find((c) => c.id === user.company_id);
-    const cid = co?.country_id;
-    if (cid && companyLinkedCountryIds.has(cid)) setUploadCountryId(cid);
-    else setUploadCountryId("");
-  }, [user?.is_admin, user?.company_id, allCompanies, companyLinkedCountryIds]);
 
   React.useEffect(() => {
     if (!modelId) {
@@ -191,7 +153,8 @@ export function UploadPage() {
       setPreviewItems(null);
       setPreviewFileSheets(null);
     },
-    onDropRejected: () => toast.error("Please choose a valid Excel file (.xlsx, .xlsm, or .xls).")
+    onDropRejected: () =>
+      toast.error("Please choose a valid Excel workbook (.xlsx, .xlsm, or .xls).")
   });
 
   React.useEffect(() => {
@@ -241,7 +204,7 @@ export function UploadPage() {
 
   async function onSubmit() {
     if (!file) {
-      toast.error("Select an Excel file first.");
+      toast.error("Select an Excel workbook (.xlsx) first.");
       return;
     }
     if (!reportKey.trim()) {
@@ -257,11 +220,6 @@ export function UploadPage() {
       toast.error(user?.is_admin ? "Select which company this upload belongs to." : "Your account has no company.");
       return;
     }
-    if (uploadCountryOptions.length > 0 && !uploadCountryId) {
-      toast.error("Select a country (only countries assigned to at least one company are listed).");
-      return;
-    }
-    const coRow = allCompanies.find((c) => c.id === resolvedCompanyId);
     setSubmitting(true);
     try {
       const created = await createUpload({
@@ -272,8 +230,6 @@ export function UploadPage() {
         mapping_config_id: selectedMappingConfigId,
         model_id: modelId || undefined,
         company_id: resolvedCompanyId,
-        region_id: coRow?.region_id || undefined,
-        country_id: uploadCountryId || undefined,
         report_year: typeof reportYear === "number" ? reportYear : undefined,
         report_month: typeof reportMonth === "number" ? reportMonth : undefined,
       });
@@ -304,13 +260,13 @@ export function UploadPage() {
   return (
     <>
       <Card
-        title="Upload Excel"
+        title="Upload report workbook"
         subtitle={
           !modelId
-            ? "Choose a model, then pick which of its saved mappings to use from the dropdown (or Manual)."
+            ? "Use an Excel .xlsx workbook (or .xlsm / .xls). Choose a model, then pick a saved mapping or Manual."
             : useCellMapping
-              ? "Extraction uses the mapping selected below: each code is read from its Sheet + Cell."
-              : "Manual layout: the file must include Code, Description, Value columns (no cell mapping)."
+              ? "Extraction uses the mapping below: each code is read from its Sheet + Cell in your workbook."
+              : "Manual: the workbook must include Code, Description, Value columns (no cell mapping)."
         }
         actions={
           <div className="flex flex-wrap items-center gap-3">
@@ -345,35 +301,21 @@ export function UploadPage() {
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </select>
-                <div className="mt-1 text-xs text-slate-500">Upload is stored under this company.</div>
-              </div>
-            ) : user?.company_name ? (
-              <div className="rounded-xl bg-white/5 px-4 py-2 text-sm text-slate-300">
-                <span className="text-slate-500">Company:</span> {user.company_name}
-              </div>
-            ) : null}
-            {uploadCountryOptions.length > 0 ? (
-              <div>
-                <div className="mb-2 text-xs font-medium text-slate-300">Country</div>
-                <select
-                  value={uploadCountryId}
-                  onChange={(e) => setUploadCountryId(e.target.value)}
-                  className="h-11 w-full rounded-xl bg-white/5 px-4 text-sm text-slate-100 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-sky-400/60"
-                >
-                  <option value="">Select country</option>
-                  {uploadCountryOptions.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
                 <div className="mt-1 text-xs text-slate-500">
-                  Only countries linked to a company in master data are shown.
+                  Upload is stored under this company. Region and country on the report come from this
+                  company&apos;s mapping in Settings → Companies (no separate country step).
                 </div>
               </div>
-            ) : (
-              <div className="rounded-xl bg-amber-500/10 px-4 py-2 text-xs text-amber-100/90 ring-1 ring-amber-400/20">
-                No company has a country set in Settings → Companies. Add a country to your company to tag uploads.
+            ) : user?.company_name ? (
+              <div className="space-y-1 rounded-xl bg-white/5 px-4 py-2 text-sm text-slate-300">
+                <div>
+                  <span className="text-slate-500">Company:</span> {user.company_name}
+                </div>
+                <div className="text-xs text-slate-500">
+                  Region and country for this upload follow your company&apos;s Settings mapping.
+                </div>
               </div>
-            )}
+            ) : null}
             <div>
               <div className="mb-2 text-xs font-medium text-slate-300">Model</div>
               <select
@@ -485,7 +427,7 @@ export function UploadPage() {
           </div>
 
           <div className="space-y-3">
-            <div className="mb-2 text-xs font-medium text-slate-300">Excel file</div>
+            <div className="mb-2 text-xs font-medium text-slate-300">Report workbook (.xlsx)</div>
             <div
               {...dz.getRootProps()}
               className={cn(
@@ -503,10 +445,10 @@ export function UploadPage() {
                   )}
                 </div>
                 <div className="mt-3 text-sm font-medium text-slate-100">
-                  {file ? file.name : "Drop your Excel here"}
+                  {file ? file.name : "Drop your .xlsx workbook here"}
                 </div>
                 <div className="mt-1 text-xs text-slate-400">
-                  {file ? "Click to replace" : "or click to browse (.xlsx, .xlsm, .xls)"}
+                  {file ? "Click to replace" : "or browse — Excel .xlsx / .xlsm / .xls"}
                 </div>
               </div>
             </div>

@@ -1,7 +1,7 @@
 import * as React from "react";
 import { deleteUpload, listUploads } from "../api/uploads";
 import { ApiError } from "../api/http";
-import { listAllCountries, listCompanies, type CountryOut, type CompanyOut } from "../api/regions";
+import { listCompanies, type CompanyOut } from "../api/regions";
 import { listCompanyModels, type CompanyModelOut } from "../api/companyModels";
 import { Badge } from "../components/Badge";
 import { Button } from "../components/Button";
@@ -13,8 +13,6 @@ import { ArrowRight, Columns2, FileSpreadsheet, RefreshCcw, Trash2 } from "lucid
 import { useNavigate } from "react-router-dom";
 import { useWorkspace } from "../workspace/tabs";
 import { useAuth } from "../auth/AuthContext";
-import { countriesForCompany } from "../lib/countriesForCompany";
-
 function formatDate(iso: string) {
   try {
     const d = new Date(iso);
@@ -34,16 +32,13 @@ export function ReportsPage() {
   const [items, setItems] = React.useState<UploadOut[]>([]);
   const [loadError, setLoadError] = React.useState<string | null>(null);
 
-  const [countries, setCountries] = React.useState<CountryOut[]>([]);
   const [models, setModels] = React.useState<CompanyModelOut[]>([]);
   const [companies, setCompanies] = React.useState<CompanyOut[]>([]);
-  const [countryId, setCountryId] = React.useState("");
   const [modelId, setModelId] = React.useState("");
   const [companyId, setCompanyId] = React.useState("");
   const [reportYear, setReportYear] = React.useState<number | "">("");
   const [reportMonth, setReportMonth] = React.useState<number | "">("");
-  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(() => new Set());
-  const [deleting, setDeleting] = React.useState(false);
+  const [deletingId, setDeletingId] = React.useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -52,7 +47,6 @@ export function ReportsPage() {
       const data = await listUploads({
         report_key: reportKey.trim() ? reportKey.trim() : undefined,
         latestOnly,
-        country_id: countryId || undefined,
         model_id: modelId || undefined,
         company_id: companyId || undefined,
         report_year: reportYear !== "" ? reportYear : undefined,
@@ -72,10 +66,9 @@ export function ReportsPage() {
   React.useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reportKey, latestOnly, countryId, modelId, companyId, reportYear, reportMonth]);
+  }, [reportKey, latestOnly, modelId, companyId, reportYear, reportMonth]);
 
   React.useEffect(() => {
-    listAllCountries().then(setCountries).catch(() => setCountries([]));
     listCompanies().then(setCompanies).catch(() => setCompanies([]));
   }, []);
 
@@ -88,32 +81,19 @@ export function ReportsPage() {
 
   const reportsCompanyAppliedRef = React.useRef<string | null>(null);
 
-  // When company changes: reset country + model filters.
+  // When company changes: reset model filter.
   React.useEffect(() => {
     if (!companyId) {
-      setCountryId("");
       setModelId("");
       reportsCompanyAppliedRef.current = null;
       return;
     }
     if (!companies.some((c) => c.id === companyId)) return;
     if (reportsCompanyAppliedRef.current !== companyId) {
-      setCountryId("");
       setModelId("");
       reportsCompanyAppliedRef.current = companyId;
     }
   }, [companyId, companies]);
-
-  const reportsCountryOptions = React.useMemo(() => {
-    if (!companyId) return countries;
-    const co = companies.find((c) => c.id === companyId);
-    return countriesForCompany(co, countries);
-  }, [companyId, companies, countries]);
-
-  React.useEffect(() => {
-    if (!countryId) return;
-    if (!reportsCountryOptions.some((c) => c.id === countryId)) setCountryId("");
-  }, [countryId, reportsCountryOptions]);
 
   /** Mapping models (uploads.model_id) — same as Dashboard / Upload, not application_models. */
   React.useEffect(() => {
@@ -153,63 +133,26 @@ export function ReportsPage() {
     return c?.name ?? "—";
   }
 
-  const allOnPageSelected =
-    items.length > 0 && items.every((u) => selectedIds.has(u.id));
-
-  function toggleSelect(id: string) {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
-  function toggleSelectAllOnPage() {
-    if (allOnPageSelected) {
-      setSelectedIds(new Set());
+  async function handleDeleteOne(u: UploadOut) {
+    if (deletingId) return;
+    if (
+      !window.confirm(
+        `Delete “${u.report_key}” v${u.version_no} and all report data? This cannot be undone.`
+      )
+    ) {
       return;
     }
-    setSelectedIds(new Set(items.map((u) => u.id)));
-  }
-
-  React.useEffect(() => {
-    setSelectedIds((prev) => {
-      const ids = new Set(items.map((u) => u.id));
-      let changed = false;
-      const next = new Set<string>();
-      for (const id of prev) {
-        if (ids.has(id)) next.add(id);
-        else changed = true;
-      }
-      if (prev.size !== next.size) changed = true;
-      return changed ? next : prev;
-    });
-  }, [items]);
-
-  async function handleDeleteSelected() {
-    const ids = Array.from(selectedIds);
-    if (ids.length === 0 || deleting) return;
-    const labels = items
-      .filter((u) => selectedIds.has(u.id))
-      .map((u) => `${u.report_key} v${u.version_no}`)
-      .join("\n");
-    const msg = `Delete ${ids.length} upload(s) and all their report data (this cannot be undone)?\n\n${labels.slice(0, 800)}${labels.length > 800 ? "\n…" : ""}`;
-    if (!window.confirm(msg)) return;
-    setDeleting(true);
+    setDeletingId(u.id);
     try {
-      for (const id of ids) {
-        await deleteUpload(id);
-      }
-      toast.success(`Deleted ${ids.length} upload(s).`);
-      setSelectedIds(new Set());
+      await deleteUpload(u.id);
+      toast.success("Upload deleted");
       await load();
     } catch (e) {
       const detail = e instanceof ApiError ? String(e.detail ?? e.message) : String((e as Error)?.message ?? e);
       toast.error("Delete failed", { description: detail });
       void load();
     } finally {
-      setDeleting(false);
+      setDeletingId(null);
     }
   }
 
@@ -236,7 +179,7 @@ export function ReportsPage() {
         </div>
 
         <div className="mt-5 space-y-3">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-4">
             <div>
               <div className="mb-1 text-xs text-slate-400">Company</div>
               <select
@@ -249,24 +192,6 @@ export function ReportsPage() {
                 {user?.is_admin ? <option value="">All</option> : null}
                 {companies.map((co) => (
                   <option key={co.id} value={co.id}>{co.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <div className="mb-1 text-xs text-slate-400">Country</div>
-              <select
-                value={countryId}
-                onChange={(e) => setCountryId(e.target.value)}
-                title={
-                  companyId
-                    ? "Countries for this company: its mapped country, or all countries in its region if none set."
-                    : "All countries (pick a company to narrow this list)"
-                }
-                className="h-10 w-full rounded-lg bg-white/5 px-3 text-sm text-slate-100 ring-1 ring-white/10"
-              >
-                <option value="">All</option>
-                {reportsCountryOptions.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
             </div>
@@ -340,7 +265,6 @@ export function ReportsPage() {
               variant="ghost"
               onClick={() => {
                 setCompanyId(user && !user.is_admin ? (user.company_id ?? "") : "");
-                setCountryId("");
                 setModelId("");
                 setReportYear("");
                 setReportMonth("");
@@ -365,55 +289,30 @@ export function ReportsPage() {
                 : "No uploads yet. Use Upload Excel to add a file, or clear filters if you expect to see results."
         }
         actions={
-          <div className="flex flex-wrap items-center gap-2">
-            {items.length > 0 ? (
-              <Button
-                type="button"
-                variant="danger"
-                size="sm"
-                disabled={selectedIds.size === 0 || deleting || loading}
-                onClick={() => void handleDeleteSelected()}
-                title="Remove selected uploads and all extracted report rows"
-              >
-                <Trash2 className="h-4 w-4" />
-                {deleting ? "Deleting…" : `Delete selected${selectedIds.size ? ` (${selectedIds.size})` : ""}`}
-              </Button>
-            ) : null}
-            {!loading && items.length === 0 && !loadError ? (
-              <Button
-                onClick={() =>
-                  openOrActivate({
-                    path: "/upload",
-                    title: "Upload Excel"
-                  })
-                }
-              >
-                Upload Excel
-              </Button>
-            ) : null}
-          </div>
+          !loading && items.length === 0 && !loadError ? (
+            <Button
+              onClick={() =>
+                openOrActivate({
+                  path: "/upload",
+                  title: "Upload Excel"
+                })
+              }
+            >
+              Upload Excel
+            </Button>
+          ) : null
         }
       >
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="text-xs text-slate-400">
               <tr className="[&>th]:pb-3 [&>th]:font-medium">
-                <th className="w-10 pr-2">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 accent-sky-400"
-                    checked={allOnPageSelected}
-                    disabled={loading || items.length === 0}
-                    onChange={toggleSelectAllOnPage}
-                    aria-label="Select all uploads on this page"
-                  />
-                </th>
                 <th>Company</th>
                 <th>Report key</th>
                 <th>Version</th>
                 <th>Filename</th>
                 <th>Uploaded</th>
-                <th className="text-right">Open</th>
+                <th className="text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="text-slate-200">
@@ -422,16 +321,6 @@ export function ReportsPage() {
                   key={u.id}
                   className="border-t border-white/10 [&>td]:py-3"
                 >
-                  <td className="pr-2 align-middle">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 accent-sky-400"
-                      checked={selectedIds.has(u.id)}
-                      disabled={loading || deleting}
-                      onChange={() => toggleSelect(u.id)}
-                      aria-label={`Select ${u.report_key} v${u.version_no}`}
-                    />
-                  </td>
                   <td className="pr-4 text-slate-300">{getCompanyName(u)}</td>
                   <td className="pr-4">
                     <div className="flex items-center gap-2">
@@ -448,24 +337,37 @@ export function ReportsPage() {
                   <td className="pr-4 text-slate-300">{u.original_filename}</td>
                   <td className="pr-4 text-slate-300">{formatDate(u.uploaded_at)}</td>
                   <td className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        openOrActivate({
-                          path: `/uploads/${u.id}`,
-                          title: `Report • ${u.report_key} v${u.version_no}`
-                        })
-                      }
-                    >
-                      View <ArrowRight className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center justify-end gap-0.5">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-9 w-9 shrink-0 p-0 text-rose-400 hover:bg-rose-500/10 hover:text-rose-300"
+                        onClick={() => void handleDeleteOne(u)}
+                        disabled={loading || deletingId !== null}
+                        aria-label={`Delete ${u.report_key} v${u.version_no}`}
+                        title="Delete upload and all report rows"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          openOrActivate({
+                            path: `/uploads/${u.id}`,
+                            title: `Report • ${u.report_key} v${u.version_no}`
+                          })
+                        }
+                      >
+                        View <ArrowRight className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}
               {!loading && items.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-slate-400">
+                  <td colSpan={6} className="py-8 text-center text-slate-400">
                     {loadError ? (
                       <div className="space-y-2">
                         <p>{loadError}</p>

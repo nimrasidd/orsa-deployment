@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, field_validator
 
 from ..db import get_db
-from .auth import get_current_user, UserOut
+from .auth import UserOut, get_current_user, require_admin
 
 router = APIRouter(prefix="/company-models", tags=["company-models"])
 
@@ -245,3 +245,49 @@ def create_company_model(
     if not r:
         raise HTTPException(status_code=500, detail="Model created but not found")
     return _row_to_out(dict(r))
+
+
+@router.delete("/{model_id}", status_code=204)
+def delete_company_model(
+    model_id: str,
+    _: Annotated[UserOut, Depends(require_admin)],
+    db: Annotated[Any, Depends(get_db)],
+):
+    """Remove a mapping model, its mapping rows, company links, and clear uploads that referenced it."""
+    import sqlite3
+
+    mid = (model_id or "").strip()
+    if not mid:
+        raise HTTPException(status_code=400, detail="model_id is required")
+
+    if isinstance(db, sqlite3.Connection):
+        cur = db.execute("select 1 from models where id = ? limit 1", (mid,))
+        if cur.fetchone() is None:
+            raise HTTPException(status_code=404, detail="Model not found")
+        db.execute(
+            "update uploads set model_id = null, mapping_config_id = null where model_id = ?",
+            (mid,),
+        )
+        db.execute("delete from mapping where model_id = ?", (mid,))
+        db.execute("delete from company_model where model_id = ?", (mid,))
+        db.execute("delete from models where id = ?", (mid,))
+        db.commit()
+        return
+
+    with db.cursor() as cur:
+        cur.execute("select 1 from public.models where id = %(id)s::uuid limit 1", {"id": mid})
+        if cur.fetchone() is None:
+            raise HTTPException(status_code=404, detail="Model not found")
+    with db.transaction():
+        with db.cursor() as cur:
+            cur.execute(
+                """
+                update public.uploads
+                set model_id = null, mapping_config_id = null
+                where model_id = %(mid)s::uuid
+                """,
+                {"mid": mid},
+            )
+            cur.execute("delete from public.mapping where model_id = %(mid)s::uuid", {"mid": mid})
+            cur.execute("delete from public.company_model where model_id = %(mid)s::uuid", {"mid": mid})
+            cur.execute("delete from public.models where id = %(mid)s::uuid", {"mid": mid})

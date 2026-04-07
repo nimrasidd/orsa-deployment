@@ -25,3 +25,9 @@ export async function createCompanyModel(name: string, companyId?: string): Prom
     body: JSON.stringify(body),
   });
 }
+
+export async function deleteCompanyModel(modelId: string): Promise<void> {
+  await apiFetch(`/company-models/${encodeURIComponent(modelId)}`, {
+    method: "DELETE",
+  });
+}

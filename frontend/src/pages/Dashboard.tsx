@@ -1,7 +1,7 @@
 import * as React from "react";
 import { listUploads } from "../api/uploads";
 import { getChartTable, type ChartTableData, type ChartTableRow, type PeriodGroup } from "../api/reports";
-import { listAllCountries, listCompanies, type CountryOut, type CompanyOut } from "../api/regions";
+import { listCompanies, type CompanyOut } from "../api/regions";
 import { listCompanyModels, type CompanyModelOut } from "../api/companyModels";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
@@ -23,8 +23,11 @@ import {
   ResponsiveContainer,
   Legend
 } from "recharts";
-import { formatCurrencyValue } from "../lib/format";
-import { countriesForCompany } from "../lib/countriesForCompany";
+import {
+  DISPLAY_CURRENCY_CODE,
+  formatCompactCurrencyAxis,
+  formatCurrencyValue,
+} from "../lib/format";
 import { withInferredDottedParents } from "../lib/hierarchyTable";
 
 function formatDate(iso: string) {
@@ -75,10 +78,8 @@ export function Dashboard() {
   const [items, setItems] = React.useState<UploadOut[]>([]);
   const [loadError, setLoadError] = React.useState<string | null>(null);
 
-  const [countries, setCountries] = React.useState<CountryOut[]>([]);
   const [models, setModels] = React.useState<CompanyModelOut[]>([]);
   const [companies, setCompanies] = React.useState<CompanyOut[]>([]);
-  const [countryId, setCountryId] = React.useState("");
   const [modelId, setModelId] = React.useState("");
   const [companyId, setCompanyId] = React.useState("");
   const [chartTable, setChartTable] = React.useState<ChartTableData | null>(null);
@@ -119,7 +120,6 @@ export function Dashboard() {
       const data = await listUploads({
         report_key: reportKey.trim() ? reportKey.trim() : undefined,
         latestOnly,
-        country_id: countryId || undefined,
         model_id: modelId || undefined,
         company_id: companyId || undefined
       });
@@ -137,10 +137,9 @@ export function Dashboard() {
   React.useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reportKey, latestOnly, countryId, modelId, companyId]);
+  }, [reportKey, latestOnly, modelId, companyId]);
 
   React.useEffect(() => {
-    listAllCountries().then(setCountries).catch(() => setCountries([]));
     listCompanies().then(setCompanies).catch(() => setCompanies([]));
   }, []);
 
@@ -151,14 +150,13 @@ export function Dashboard() {
     }
   }, [user?.id, user?.is_admin, user?.company_id]);
 
-  // Chart data refetches with the same scope as the uploads filters (company, country, model, report key, dates, node)
+  // Chart data refetches with the same scope as the uploads filters (company, model, report key, dates, node)
   React.useEffect(() => {
     let cancelled = false;
     setChartLoading(true);
     const params = {
       report_key: reportKey.trim() || undefined,
       company_id: companyId || undefined,
-      country_id: countryId || undefined,
       model_id: modelId || undefined,
       latest_only: latestOnly || undefined,
       node_code: nodeCodeFilter.trim() || undefined,
@@ -180,7 +178,6 @@ export function Dashboard() {
   }, [
     reportKey,
     companyId,
-    countryId,
     modelId,
     latestOnly,
     nodeCodeFilter,
@@ -191,32 +188,19 @@ export function Dashboard() {
 
   const dashboardCompanyAppliedRef = React.useRef<string | null>(null);
 
-  // When company changes: reset country + model filters.
+  // When company changes: reset model filter.
   React.useEffect(() => {
     if (!companyId) {
-      setCountryId("");
       setModelId("");
       dashboardCompanyAppliedRef.current = null;
       return;
     }
     if (!companies.some((c) => c.id === companyId)) return;
     if (dashboardCompanyAppliedRef.current !== companyId) {
-      setCountryId("");
       setModelId("");
       dashboardCompanyAppliedRef.current = companyId;
     }
   }, [companyId, companies]);
-
-  const dashboardCountryOptions = React.useMemo(() => {
-    if (!companyId) return countries;
-    const co = companies.find((c) => c.id === companyId);
-    return countriesForCompany(co, countries);
-  }, [companyId, companies, countries]);
-
-  React.useEffect(() => {
-    if (!countryId) return;
-    if (!dashboardCountryOptions.some((c) => c.id === countryId)) setCountryId("");
-  }, [countryId, dashboardCountryOptions]);
 
   // Mapping models (uploads.model_id) — all models for admin + “All companies”, else company-linked list
   React.useEffect(() => {
@@ -349,7 +333,7 @@ export function Dashboard() {
 
         {
         <div className="mt-5 space-y-3">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-2">
             <div>
               <div className="mb-1 text-xs text-slate-400">Company</div>
               <select
@@ -362,24 +346,6 @@ export function Dashboard() {
                 {user?.is_admin ? <option value="">All</option> : null}
                 {companies.map((co) => (
                   <option key={co.id} value={co.id}>{co.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <div className="mb-1 text-xs text-slate-400">Country</div>
-              <select
-                value={countryId}
-                onChange={(e) => setCountryId(e.target.value)}
-                title={
-                  companyId
-                    ? "Countries for this company: its mapped country, or all countries in its region if none set."
-                    : "All countries (pick a company to narrow this list)"
-                }
-                className="h-10 w-full rounded-lg bg-white/5 px-3 text-sm text-slate-100 ring-1 ring-white/10"
-              >
-                <option value="">All</option>
-                {dashboardCountryOptions.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
             </div>
@@ -430,7 +396,6 @@ export function Dashboard() {
               variant="ghost"
               onClick={() => {
                 setCompanyId(user && !user.is_admin ? (user.company_id ?? "") : "");
-                setCountryId("");
                 setModelId("");
                 setReportKey("");
                 setNodeCodeFilter("");
@@ -564,7 +529,7 @@ export function Dashboard() {
             <div className="flex h-full items-center justify-center text-sm text-slate-500">Loading…</div>
           ) : hasLineChartSeries && lineChartData.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-              <LineChart data={lineChartData} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+              <LineChart data={lineChartData} margin={{ top: 8, right: 12, left: 8, bottom: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
                 <XAxis
                   dataKey="xLabel"
@@ -582,10 +547,18 @@ export function Dashboard() {
                 <YAxis
                   stroke="#94a3b8"
                   fontSize={11}
+                  width={68}
                   tickLine={false}
                   axisLine={false}
-                  tickFormatter={(v) => formatCurrencyValue(v)}
-                  label={{ value: "Value", angle: -90, position: "insideLeft", fill: "#94a3b8", fontSize: 11 }}
+                  tickFormatter={(v) => formatCompactCurrencyAxis(v)}
+                  label={{
+                    value: `Amount (${DISPLAY_CURRENCY_CODE})`,
+                    angle: -90,
+                    position: "insideLeft",
+                    fill: "#94a3b8",
+                    fontSize: 11,
+                    style: { textAnchor: "middle" },
+                  }}
                 />
                 <Tooltip
                   contentStyle={{ background: "rgb(15 23 42)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px" }}

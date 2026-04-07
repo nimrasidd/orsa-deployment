@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import re
 import zipfile
+from io import BytesIO
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi.responses import StreamingResponse
 from xlrd.biffh import XLRDError
 
 from ..db import get_db
@@ -357,6 +360,96 @@ def get_mapping_items(
             {"config_id": cfg},
         )
         return list(cur.fetchall())
+
+
+def _safe_mapping_export_filename(name: str, version: int) -> str:
+    base = re.sub(r"[^\w\-.]+", "_", (name or "mapping").strip(), flags=re.ASCII)[:80]
+    if not base:
+        base = "mapping"
+    return f"{base}_v{version}.xlsx"
+
+
+@router.get("/{mapping_id}/export")
+def export_mapping_workbook(
+    mapping_id: str,
+    db: Annotated[Any, Depends(get_db)],
+    user: Annotated[UserOut, Depends(get_current_user)],
+):
+    """Download mapping as an .xlsx workbook (Code, Description, Sheet, Cell Reference, Level, Parent Code)."""
+    import sqlite3
+
+    import openpyxl
+
+    _assert_mapping_for_user(db, user, mapping_id)
+    cfg = mapping_id
+
+    if isinstance(db, sqlite3.Connection):
+        cur = db.execute(
+            "select name, version from mapping where config_id = ? limit 1",
+            (cfg,),
+        )
+        meta = cur.fetchone()
+        if not meta:
+            raise HTTPException(status_code=404, detail="Mapping not found")
+        meta = dict(zip(meta.keys(), meta))
+        cur = db.execute(
+            """
+            select code, description, sheet_name, cell_ref, level, parent_code
+            from mapping
+            where config_id = ?
+            order by level, code
+            """,
+            (cfg,),
+        )
+        rows = [dict(zip(r.keys(), r)) for r in cur.fetchall()]
+    else:
+        with db.cursor() as cur:
+            cur.execute(
+                "select name, version from public.mapping where config_id = %(id)s limit 1",
+                {"id": cfg},
+            )
+            meta = cur.fetchone()
+            if not meta:
+                raise HTTPException(status_code=404, detail="Mapping not found")
+            cur.execute(
+                """
+                select code, description, sheet_name, cell_ref, level, parent_code
+                from public.mapping
+                where config_id = %(id)s
+                order by level, code
+                """,
+                {"id": cfg},
+            )
+            rows = list(cur.fetchall())
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    if ws is None:
+        raise RuntimeError("openpyxl workbook has no active worksheet")
+    ws.title = "Mapping"
+    ws.append(["Code", "Description", "Sheet", "Cell Reference", "Level", "Parent Code"])
+    for r in rows:
+        pc = r.get("parent_code")
+        ws.append(
+            [
+                r.get("code") or "",
+                r.get("description") or "",
+                r.get("sheet_name") or "",
+                r.get("cell_ref") or "",
+                r.get("level") if r.get("level") is not None else "",
+                (pc or "").strip() if pc else "",
+            ]
+        )
+
+    bio = BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+    fname = _safe_mapping_export_filename(str(meta.get("name", "")), int(meta.get("version") or 1))
+    return StreamingResponse(
+        bio,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
 
 
 @router.post("/{mapping_id}/activate", response_model=MappingOut)

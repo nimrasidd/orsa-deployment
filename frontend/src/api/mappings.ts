@@ -1,4 +1,4 @@
-import { apiFetch } from "./http";
+import { apiFetch, apiFetchBlob } from "./http";
 import type { MappingItemOut, MappingOut } from "../types";
 
 export async function listMappings(modelId?: string): Promise<MappingOut[]> {
@@ -40,6 +40,20 @@ export async function deleteMapping(mappingId: string): Promise<void> {
   return apiFetch(`/mappings/${mappingId}`, {
     method: "DELETE"
   });
+}
+
+/** Download mapping as .xlsx (Code, Description, Sheet, Cell Reference, …). */
+export async function downloadMappingWorkbook(mappingId: string): Promise<void> {
+  const { blob, filename } = await apiFetchBlob(`/mappings/${encodeURIComponent(mappingId)}/export`);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename ?? `mapping-${mappingId.slice(0, 8)}.xlsx`;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 export async function getActiveMappingItems(modelId?: string): Promise<MappingItemOut[]> {
