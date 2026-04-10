@@ -15,6 +15,7 @@ import {
   deleteCompanyModel,
   type CompanyModelOut
 } from "../api/companyModels";
+import { listAllCountries, type CountryOut } from "../api/regions";
 import { useAuth } from "../auth/AuthContext";
 import { Badge } from "../components/Badge";
 import { Button } from "../components/Button";
@@ -62,6 +63,8 @@ export function MappingsPage() {
   const [modelId, setModelId] = React.useState("");
   const [showCreateModel, setShowCreateModel] = React.useState(false);
   const [newModelName, setNewModelName] = React.useState("");
+  const [newModelCountryId, setNewModelCountryId] = React.useState("");
+  const [countries, setCountries] = React.useState<CountryOut[]>([]);
   const [creatingModel, setCreatingModel] = React.useState(false);
   const [deletingModelId, setDeletingModelId] = React.useState<string | null>(null);
   const [mappingDownloadId, setMappingDownloadId] = React.useState<string | null>(null);
@@ -100,6 +103,18 @@ export function MappingsPage() {
       setLoading(false);
     }
   }
+
+  React.useEffect(() => {
+    if (!user) return;
+    listAllCountries()
+      .then((data) => {
+        const arr = Array.isArray(data) ? data : [];
+        arr.sort((a, b) => a.name.localeCompare(b.name));
+        setCountries(arr);
+        setNewModelCountryId((prev) => (prev && arr.some((c) => c.id === prev) ? prev : ""));
+      })
+      .catch(() => setCountries([]));
+  }, [user?.id]);
 
   React.useEffect(() => {
     if (!user) return;
@@ -268,15 +283,23 @@ export function MappingsPage() {
       toast.error("Enter a model name.");
       return;
     }
+    if (!newModelCountryId) {
+      toast.error("Select a country for this model.");
+      return;
+    }
     setCreatingModel(true);
     try {
-      const created = await createCompanyModel(newModelName.trim());
-      toast.success("Model created", { description: created.name });
+      const created = await createCompanyModel({
+        name: newModelName.trim(),
+        country_id: newModelCountryId,
+      });
+      toast.success("Model created", { description: `${created.name} · ${created.country_name ?? "Country set"}` });
       const all = await listCompanyModels();
       setCompanyModels(Array.isArray(all) ? all : []);
       setModelId(created.id);
       setShowCreateModel(false);
       setNewModelName("");
+      setNewModelCountryId("");
     } catch (e: any) {
       toast.error("Failed to create model", {
         description: e?.detail ? String(e.detail) : String(e?.message ?? e)
@@ -380,7 +403,7 @@ export function MappingsPage() {
         <div>
           <div className="text-sm font-semibold text-slate-100">Model-based Mapping</div>
           <div className="mt-1 text-xs text-slate-400">
-            Create a model, then upload its mapping as an .xlsx workbook (Code → Sheet, Cell Reference).
+            Create a model (name + country), then upload its mapping as an .xlsx workbook (Code → Sheet, Cell Reference).
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -404,7 +427,7 @@ export function MappingsPage() {
       {tab === "models" && (
         <Card
           title="Models"
-          subtitle="Mapping models are shared: every company can use them. Upload an .xlsx mapping workbook in the Mappings tab."
+          subtitle="Each model is tied to a country. Models are shared: every company can use them. Upload mappings in the Mappings tab."
         >
           <div className="space-y-4">
             <div className="flex flex-wrap items-end gap-3">
@@ -419,10 +442,33 @@ export function MappingsPage() {
                       className="w-48"
                     />
                   </div>
-                  <Button onClick={handleCreateModel} disabled={creatingModel || !newModelName.trim()}>
+                  <div>
+                    <div className="mb-1 text-xs text-slate-400">Country</div>
+                    <select
+                      value={newModelCountryId}
+                      onChange={(e) => setNewModelCountryId(e.target.value)}
+                      className="h-10 min-w-[12rem] rounded-lg bg-white/5 px-3 text-sm text-slate-100 ring-1 ring-white/10"
+                    >
+                      <option value="">Select country</option>
+                      {countries.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <Button
+                    onClick={() => void handleCreateModel()}
+                    disabled={creatingModel || !newModelName.trim() || !newModelCountryId}
+                  >
                     {creatingModel ? "Creating…" : "Create Model"}
                   </Button>
-                  <Button variant="ghost" onClick={() => { setShowCreateModel(false); setNewModelName(""); }}>
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setShowCreateModel(false);
+                      setNewModelName("");
+                      setNewModelCountryId("");
+                    }}
+                  >
                     Cancel
                   </Button>
                 </>
@@ -444,6 +490,7 @@ export function MappingsPage() {
                     <thead className="sticky top-0 z-[1] bg-slate-950/95 text-xs text-slate-400 backdrop-blur">
                       <tr className="border-b border-white/10">
                         <th className="px-4 py-2.5 font-medium">Model name</th>
+                        <th className="px-4 py-2.5 font-medium">Country</th>
                         <th className="px-4 py-2.5 font-medium">Created</th>
                         <th className="px-4 py-2.5 font-medium">Created by</th>
                         <th className="px-4 py-2.5 font-medium text-right">Actions</th>
@@ -459,6 +506,9 @@ export function MappingsPage() {
                           )}
                         >
                           <td className="px-4 py-2.5 font-medium text-slate-100">{m.name}</td>
+                          <td className="px-4 py-2.5 text-xs text-slate-400">
+                            {m.country_name ?? "—"}
+                          </td>
                           <td className="px-4 py-2.5 text-xs text-slate-400">
                             {m.created_at ? formatDate(m.created_at) : "—"}
                           </td>
@@ -515,7 +565,10 @@ export function MappingsPage() {
                 className="h-10 rounded-lg bg-white/5 px-3 text-sm text-slate-100 ring-1 ring-white/10"
               >
                 {companyModels.map((m) => (
-                  <option key={m.id} value={m.id}>{m.name}</option>
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                    {m.country_name ? ` · ${m.country_name}` : ""}
+                  </option>
                 ))}
               </select>
               <span className="text-xs text-slate-500">Upload an .xlsx mapping workbook for this model below.</span>

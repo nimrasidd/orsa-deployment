@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any, cast
 
 from fastapi import FastAPI
 
@@ -98,7 +99,7 @@ def debug_db():
     from pathlib import Path
 
     url = settings.database_url
-    info = {
+    info: dict[str, Any] = {
         "database": "sqlite" if url.startswith("sqlite:///") else "postgres",
         "mapping_count": None,
         "uploads_count": None,
@@ -123,14 +124,23 @@ def debug_db():
             conn.close()
         else:
             import psycopg
+            from psycopg import sql
             from psycopg.rows import dict_row
-            conn = psycopg.connect(url, row_factory=dict_row, prepare_threshold=None)
+
+            conn = psycopg.connect(
+                url,
+                row_factory=cast(Any, dict_row),
+                prepare_threshold=None,
+            )
             try:
                 with conn.cursor() as cur:
                     for tbl, col in [("mapping", "mapping_count"), ("uploads", "uploads_count"), ("report_nodes", "report_nodes_count"), ("report_region_applicability", "report_region_applicability_count")]:
                         try:
-                            cur.execute(f"select count(*) as n from public.{tbl}")
-                            info[col] = cur.fetchone()["n"]
+                            cur.execute(
+                                sql.SQL("select count(*) as n from public.{}").format(sql.Identifier(tbl))
+                            )
+                            row = cur.fetchone()
+                            info[col] = int(cast(dict[str, Any], row)["n"]) if row is not None else 0
                         except Exception:
                             info[col] = None
             finally:
@@ -144,21 +154,27 @@ def debug_db():
 def debug_app_db(db=Depends(get_db)):
     """Table counts from the DB connection the app actually uses (includes SQLite fallback)."""
     import sqlite3
-    info = {"database": "sqlite" if isinstance(db, sqlite3.Connection) else "postgres"}
+
+    info: dict[str, Any] = {"database": "sqlite" if isinstance(db, sqlite3.Connection) else "postgres"}
     try:
         if isinstance(db, sqlite3.Connection):
             for tbl, col in [("uploads", "uploads_count"), ("report_nodes", "report_nodes_count"), ("report_region_applicability", "report_region_applicability_count")]:
                 try:
                     r = db.execute(f"select count(*) as n from {tbl}").fetchone()
-                    info[col] = r["n"] if r else 0
+                    info[col] = int(r["n"]) if r is not None else 0
                 except Exception:
                     info[col] = None
         else:
+            from psycopg import sql
+
             with db.cursor() as cur:
                 for tbl, col in [("uploads", "uploads_count"), ("report_nodes", "report_nodes_count"), ("report_region_applicability", "report_region_applicability_count")]:
                     try:
-                        cur.execute(f"select count(*) as n from public.{tbl}")
-                        info[col] = cur.fetchone()["n"]
+                        cur.execute(
+                            sql.SQL("select count(*) as n from public.{}").format(sql.Identifier(tbl))
+                        )
+                        row = cur.fetchone()
+                        info[col] = int(cast(dict[str, Any], row)["n"]) if row is not None else 0
                     except Exception:
                         info[col] = None
     except Exception as e:

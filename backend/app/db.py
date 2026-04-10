@@ -14,6 +14,22 @@ from .config import settings
 _sqlite_initialized = False
 
 
+def _sqlite_ensure_models_country_id(conn: sqlite3.Connection) -> None:
+    """Add models.country_id for mapping model → country (idempotent)."""
+    cur = conn.execute("select name from sqlite_master where type='table' and name='models'")
+    if not cur.fetchone():
+        return
+    cur = conn.execute("pragma table_info(models)")
+    if any(r[1] == "country_id" for r in cur.fetchall()):
+        return
+    try:
+        conn.execute(
+            "alter table models add column country_id text references countries(id)"
+        )
+    except sqlite3.OperationalError:
+        pass
+
+
 def _sqlite_ensure_company_model_m2m(conn: sqlite3.Connection) -> None:
     """Global mapping models + company_model junction. Migrate legacy models.company_id."""
     cur = conn.execute("select name from sqlite_master where type='table' and name='models'")
@@ -75,6 +91,7 @@ def _sqlite_ensure_company_model_m2m(conn: sqlite3.Connection) -> None:
             pass
     finally:
         conn.execute("PRAGMA foreign_keys=ON")
+    _sqlite_ensure_models_country_id(conn)
 
 
 def _ensure_models_migration(conn: sqlite3.Connection) -> None:

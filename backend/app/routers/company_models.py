@@ -18,6 +18,8 @@ class CompanyModelOut(BaseModel):
     name: str
     company_id: str | None = None
     company_name: str | None = None
+    country_id: str | None = None
+    country_name: str | None = None
     created_by_user_id: str | None = None
     created_at: str | None = None
     created_by_name: str | None = None
@@ -35,20 +37,38 @@ class CompanyModelOut(BaseModel):
 
 class CreateCompanyModelIn(BaseModel):
     name: str
+    country_id: str
     company_id: str | None = None
 
 
 def _row_to_out(row: dict) -> CompanyModelOut:
+    cid = row.get("country_id")
     return CompanyModelOut(
         id=str(row["id"]),
         name=row["name"],
         company_id=None,
         company_name=None,
+        country_id=str(cid) if cid else None,
+        country_name=row.get("country_name"),
         created_by_user_id=str(row["created_by_user_id"]) if row.get("created_by_user_id") else None,
         created_at=str(row["created_at"]) if row.get("created_at") is not None else None,
         created_by_name=row.get("created_by_name"),
         created_by_email=row.get("created_by_email"),
     )
+
+
+def _country_exists(conn: Any, country_id: str) -> bool:
+    import sqlite3
+
+    if isinstance(conn, sqlite3.Connection):
+        cur = conn.execute("select 1 from countries where id = ? limit 1", (country_id,))
+        return cur.fetchone() is not None
+    with conn.cursor() as cur:
+        cur.execute(
+            "select 1 from public.countries where id = %(id)s limit 1",
+            {"id": country_id},
+        )
+        return cur.fetchone() is not None
 
 
 def _list_models_for_company(conn: Any, company_id: str) -> list[dict]:
@@ -57,11 +77,13 @@ def _list_models_for_company(conn: Any, company_id: str) -> list[dict]:
     if isinstance(conn, sqlite3.Connection):
         cur = conn.execute(
             """
-            select m.id, m.name, m.created_by_user_id, m.created_at,
-                   u.name as created_by_name, u.email as created_by_email
+            select m.id, m.name, m.created_by_user_id, m.created_at, m.country_id,
+                   u.name as created_by_name, u.email as created_by_email,
+                   co.name as country_name
             from models m
             inner join company_model cm on cm.model_id = m.id and cm.company_id = ?
             left join users u on u.id = m.created_by_user_id
+            left join countries co on co.id = m.country_id
             order by (m.created_at is null), m.created_at desc, m.name
             """,
             (company_id,),
@@ -70,11 +92,13 @@ def _list_models_for_company(conn: Any, company_id: str) -> list[dict]:
     with conn.cursor() as cur:
         cur.execute(
             """
-            select m.id, m.name, m.created_by_user_id, m.created_at,
-                   u.name as created_by_name, u.email as created_by_email
+            select m.id, m.name, m.created_by_user_id, m.created_at, m.country_id,
+                   u.name as created_by_name, u.email as created_by_email,
+                   c.name as country_name
             from public.models m
             inner join public.company_model cm on cm.model_id = m.id and cm.company_id = %(cid)s::uuid
             left join public.users u on u.id = m.created_by_user_id
+            left join public.countries c on c.id = m.country_id
             order by (m.created_at is null), m.created_at desc, m.name
             """,
             {"cid": company_id},
@@ -88,10 +112,12 @@ def _list_all_models(conn: Any) -> list[dict]:
     if isinstance(conn, sqlite3.Connection):
         cur = conn.execute(
             """
-            select m.id, m.name, m.created_by_user_id, m.created_at,
-                   u.name as created_by_name, u.email as created_by_email
+            select m.id, m.name, m.created_by_user_id, m.created_at, m.country_id,
+                   u.name as created_by_name, u.email as created_by_email,
+                   co.name as country_name
             from models m
             left join users u on u.id = m.created_by_user_id
+            left join countries co on co.id = m.country_id
             order by m.name, (m.created_at is null), m.created_at desc
             """
         )
@@ -99,10 +125,12 @@ def _list_all_models(conn: Any) -> list[dict]:
     with conn.cursor() as cur:
         cur.execute(
             """
-            select m.id, m.name, m.created_by_user_id, m.created_at,
-                   u.name as created_by_name, u.email as created_by_email
+            select m.id, m.name, m.created_by_user_id, m.created_at, m.country_id,
+                   u.name as created_by_name, u.email as created_by_email,
+                   c.name as country_name
             from public.models m
             left join public.users u on u.id = m.created_by_user_id
+            left join public.countries c on c.id = m.country_id
             order by m.name, (m.created_at is null), m.created_at desc
             """
         )
@@ -184,6 +212,11 @@ def create_company_model(
     name = body.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="Model name is required")
+    country_id = (body.country_id or "").strip()
+    if not country_id:
+        raise HTTPException(status_code=400, detail="Country is required")
+    if not _country_exists(db, country_id):
+        raise HTTPException(status_code=404, detail="Country not found")
 
     if not user.is_admin:
         cid = user.company_id or ""
@@ -199,8 +232,17 @@ def create_company_model(
     if isinstance(db, sqlite3.Connection):
         now = datetime.now(timezone.utc).isoformat()
         db.execute(
-            "insert into models (id, created_by_user_id, name, created_at) values (:id, :created_by, :name, :created_at)",
-            {"id": model_id, "created_by": created_by, "name": name, "created_at": now},
+            """
+            insert into models (id, created_by_user_id, name, created_at, country_id)
+            values (:id, :created_by, :name, :created_at, :country_id)
+            """,
+            {
+                "id": model_id,
+                "created_by": created_by,
+                "name": name,
+                "created_at": now,
+                "country_id": country_id,
+            },
         )
         _link_model_to_all_companies(db, model_id)
         db.commit()
@@ -209,20 +251,27 @@ def create_company_model(
             with db.cursor() as cur:
                 cur.execute(
                     """
-                    insert into public.models (id, created_by_user_id, name)
-                    values (%(id)s, %(created_by)s, %(name)s)
+                    insert into public.models (id, created_by_user_id, name, country_id)
+                    values (%(id)s, %(created_by)s, %(name)s, %(country_id)s)
                     """,
-                    {"id": model_id, "created_by": created_by, "name": name},
+                    {
+                        "id": model_id,
+                        "created_by": created_by,
+                        "name": name,
+                        "country_id": country_id,
+                    },
                 )
         _link_model_to_all_companies(db, model_id)
 
     if isinstance(db, sqlite3.Connection):
         cur = db.execute(
             """
-            select m.id, m.name, m.created_by_user_id, m.created_at,
-                   u.name as created_by_name, u.email as created_by_email
+            select m.id, m.name, m.created_by_user_id, m.created_at, m.country_id,
+                   u.name as created_by_name, u.email as created_by_email,
+                   co.name as country_name
             from models m
             left join users u on u.id = m.created_by_user_id
+            left join countries co on co.id = m.country_id
             where m.id = ?
             """,
             (model_id,),
@@ -233,10 +282,12 @@ def create_company_model(
         with db.cursor() as cur:
             cur.execute(
                 """
-                select m.id, m.name, m.created_by_user_id, m.created_at,
-                       u.name as created_by_name, u.email as created_by_email
+                select m.id, m.name, m.created_by_user_id, m.created_at, m.country_id,
+                       u.name as created_by_name, u.email as created_by_email,
+                       c.name as country_name
                 from public.models m
                 left join public.users u on u.id = m.created_by_user_id
+                left join public.countries c on c.id = m.country_id
                 where m.id = %(id)s
                 """,
                 {"id": model_id},
