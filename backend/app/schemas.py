@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, Literal
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -33,23 +34,23 @@ class CompanyOut(BaseModel):
 
 
 class UploadOut(BaseModel):
-    id: str
+    id: str | UUID
     report_key: str
     version_no: int
     original_filename: str
     uploaded_at: datetime
     notes: str | None = None
-    region_id: str | None = None
-    country_id: str | None = None
-    model_id: str | None = None
-    company_id: str | None = None
+    region_id: str | UUID | None = None
+    country_id: str | UUID | None = None
+    model_id: str | UUID | None = None
+    company_id: str | UUID | None = None
     report_year: int | None = None
     report_month: int | None = None
 
 
 class ReportNodeOut(BaseModel):
-    id: str
-    upload_id: str
+    id: str | UUID
+    upload_id: str | UUID
     code: str
     level: int
     parent_code: str | None = None
@@ -61,7 +62,7 @@ class ReportNodeOut(BaseModel):
 
 
 class TreeNode(BaseModel):
-    id: str
+    id: str | UUID
     code: str
     description: str | None = None
     value: Decimal | None = None
@@ -77,8 +78,9 @@ class HealthOut(BaseModel):
 
 
 class MappingOut(BaseModel):
-    id: str
-    model_id: str | None = None
+    # Postgres returns UUID objects; accept both and serialize as JSON strings.
+    id: str | UUID
+    model_id: str | UUID | None = None
     model_name: str | None = None
     name: str
     version: int
@@ -90,8 +92,8 @@ class MappingOut(BaseModel):
 
 
 class MappingItemOut(BaseModel):
-    id: str
-    mapping_id: str
+    id: str | UUID
+    mapping_id: str | UUID
     code: str
     description: str | None = None
     sheet_name: str

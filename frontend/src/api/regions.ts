@@ -54,6 +54,12 @@ export async function createCompany(input: {
   });
 }
 
+export async function deleteCompany(companyId: string): Promise<{ ok: boolean }> {
+  return apiFetch<{ ok: boolean }>(`/companies/${encodeURIComponent(companyId)}`, {
+    method: "DELETE",
+  });
+}
+
 export type ModelOut = {
   id: string;
   country_id: string;

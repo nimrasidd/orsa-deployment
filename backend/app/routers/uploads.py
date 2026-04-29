@@ -58,29 +58,10 @@ def _region_country_for_company(db: Any, company_id: str) -> tuple[str | None, s
 
 
 def _assert_model_in_company(db: Any, model_id: str | None, company_id: str) -> None:
-    if not model_id:
-        return
-    import sqlite3
-
-    if isinstance(db, sqlite3.Connection):
-        cur = db.execute(
-            "select 1 from company_model where company_id = ? and model_id = ? limit 1",
-            (company_id, model_id),
-        )
-        ok = cur.fetchone() is not None
-    else:
-        with db.cursor() as cur:
-            cur.execute(
-                """
-                select 1 from public.company_model
-                where company_id = %(cid)s::uuid and model_id = %(mid)s::uuid
-                limit 1
-                """,
-                {"cid": company_id, "mid": model_id},
-            )
-            ok = cur.fetchone() is not None
-    if not ok:
-        raise HTTPException(status_code=403, detail="Model is not available for your company")
+    # Company-based model access removed.
+    # Kept for backward compatibility; no-op now.
+    _ = (db, model_id, company_id)
+    return
 
 
 def _assert_mapping_config_usable(

@@ -1,6 +1,7 @@
 """Authentication: login, JWT, company-based users."""
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any
 
@@ -15,6 +16,7 @@ from ..db import get_db
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 security = HTTPBearer(auto_error=False)
+logger = logging.getLogger("app.auth")
 
 
 def _verify_password(plain: str, hashed: str) -> bool:
@@ -140,6 +142,7 @@ def _verify_user(conn: Any, email: str, password: str) -> dict | None:
         )
         row = cur.fetchone()
         if not row:
+            logger.info("Login failed: user not found (sqlite) email=%s", email_lower)
             return None
         r = dict(row)
     else:
@@ -150,9 +153,11 @@ def _verify_user(conn: Any, email: str, password: str) -> dict | None:
             )
             r = cur.fetchone()
         if not r:
+            logger.info("Login failed: user not found email=%s", email_lower)
             return None
 
     if not _verify_password(password, r["password_hash"]):
+        logger.info("Login failed: password mismatch email=%s", email_lower)
         return None
     return r
 
@@ -190,16 +195,30 @@ def register_user_account(db: Any, body: RegisterIn) -> UserOut:
         )
         db.commit()
     else:
-        with db.transaction():
+        # psycopg3: be explicit about commit/rollback so inserts persist.
+        try:
             with db.cursor() as cur:
-                cur.execute("select id from public.companies where id = %(cid)s", {"cid": body.company_id})
+                cur.execute(
+                    "select id from public.companies where id = %(cid)s::uuid",
+                    {"cid": body.company_id},
+                )
                 if not cur.fetchone():
                     raise HTTPException(status_code=400, detail="Company not found")
-                cur.execute("select id from public.users where lower(email) = %(email)s", {"email": email})
+
+                cur.execute(
+                    "select id from public.users where lower(email) = %(email)s",
+                    {"email": email},
+                )
                 if cur.fetchone():
                     raise HTTPException(status_code=400, detail="Email already registered")
+
                 cur.execute(
-                    "insert into public.users (id, email, password_hash, name, company_id, created_at, is_admin) values (%(id)s, %(email)s, %(password_hash)s, %(name)s, %(company_id)s, %(created_at)s, false)",
+                    """
+                    insert into public.users
+                      (id, email, password_hash, name, company_id, created_at, is_admin)
+                    values
+                      (%(id)s::uuid, %(email)s, %(password_hash)s, %(name)s, %(company_id)s::uuid, %(created_at)s, false)
+                    """,
                     {
                         "id": user_id,
                         "email": email,
@@ -209,6 +228,19 @@ def register_user_account(db: Any, body: RegisterIn) -> UserOut:
                         "created_at": now,
                     },
                 )
+            db.commit()
+        except HTTPException:
+            try:
+                db.rollback()
+            except Exception:
+                pass
+            raise
+        except Exception as e:
+            try:
+                db.rollback()
+            except Exception:
+                pass
+            raise HTTPException(status_code=400, detail=f"Could not create user: {e}") from e
 
     full = _get_user_by_email(db, body.email)
     if not full:
@@ -225,15 +257,62 @@ def register(db: Annotated[Any, Depends(get_db)], body: RegisterIn):
 @router.post("/login", response_model=LoginOut)
 def login(db: Annotated[Any, Depends(get_db)], body: LoginIn):
     """Login with email and password. Returns JWT and user info."""
-    user = _verify_user(db, body.email, body.password)
+    email_lower = body.email.strip().lower()
+    logger.info("Login attempt email=%s", email_lower)
+    # #region agent log
+    from ..debug_log import emit
+
+    emit(
+        "app/routers/auth.py:login",
+        "Login start",
+        data={"email": email_lower, "db_kind": type(db).__name__},
+        hypothesis_id="B",
+        run_id="pre-fix",
+    )
+    # #endregion
+
+    try:
+        user = _verify_user(db, body.email, body.password)
+    except Exception as e:
+        # #region agent log
+        emit(
+            "app/routers/auth.py:login",
+            "Login failed during _verify_user",
+            data={"email": email_lower, "error_type": type(e).__name__, "error": str(e)[:300]},
+            hypothesis_id="B",
+            run_id="pre-fix",
+        )
+        # #endregion
+        raise
     if not user:
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
-    full = _get_user_by_email(db, body.email)
+    try:
+        full = _get_user_by_email(db, body.email)
+    except Exception as e:
+        # #region agent log
+        emit(
+            "app/routers/auth.py:login",
+            "Login failed during _get_user_by_email",
+            data={"email": email_lower, "error_type": type(e).__name__, "error": str(e)[:300]},
+            hypothesis_id="C",
+            run_id="pre-fix",
+        )
+        # #endregion
+        raise
     if not full:
         raise HTTPException(status_code=500, detail="User record incomplete")
 
     token = _create_token(str(user["id"]))
+    # #region agent log
+    emit(
+        "app/routers/auth.py:login",
+        "Login success",
+        data={"email": email_lower, "user_id": str(user.get("id"))},
+        hypothesis_id="D",
+        run_id="pre-fix",
+    )
+    # #endregion
     return LoginOut(
         access_token=token,
         user=user_out_from_row(dict(full)),

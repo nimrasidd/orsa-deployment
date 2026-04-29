@@ -19,7 +19,7 @@ def _list_regions(conn: Any) -> list[dict]:
 
     with conn.cursor() as cur:
         cur.execute(
-            "select id, name from public.regions order by name"
+            "select id::text as id, name from public.regions order by name"
         )
         return list(cur.fetchall())
 
@@ -36,7 +36,7 @@ def _list_countries_by_region(conn: Any, region_id: str) -> list[dict]:
 
     with conn.cursor() as cur:
         cur.execute(
-            "select id, region_id, name from public.countries where region_id = %(region_id)s order by name",
+            "select id::text as id, region_id::text as region_id, name from public.countries where region_id = %(region_id)s::uuid order by name",
             {"region_id": region_id},
         )
         return list(cur.fetchall())

@@ -122,4 +122,18 @@ Open http://localhost:5173 (or 5174 if 5173 is in use).
 - **Supabase** — Set `DATABASE_URL` in `backend/.env` (use pooler on port 6543 for transaction mode).
 - **SQLite** — Use `DATABASE_URL=sqlite:///./osra.db` for local dev; data in `backend/osra.db`.
 - **Migrations** — Run `000_full_schema.sql` and `001_region_country_model.sql` in Supabase SQL Editor.
+
+### 9. Docker: run Postgres in Compose + migrate `orsa_db`
+
+This repo can run the DB in Docker Compose (service name `db`). To migrate your existing database from `128.1.50.163` into the compose DB:
+
+1) Ensure the **source** Postgres allows your dump connection in `pg_hba.conf` (otherwise `pg_dump` will fail).
+
+2) From the repo root, run:
+
+```powershell
+./scripts/migrate_orsa_db.ps1 -SourceHost 128.1.50.163 -SourceUser postgres -SourceDb orsa_db -DumpFile orsa_db.dump
+```
+
+That script uses a temporary `postgres:16` container to run `pg_dump`, then restores into the `db` container via `pg_restore`.
         

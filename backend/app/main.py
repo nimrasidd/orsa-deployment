@@ -5,22 +5,41 @@ from typing import Any, cast
 
 from fastapi import FastAPI
 
-# Ensure upload/excel errors are visible in server logs
+# Ensure app logs are visible in server logs
+logging.basicConfig(level=logging.INFO)
 logging.getLogger("app").setLevel(logging.INFO)
+logging.getLogger("app.db").setLevel(logging.INFO)
+logging.getLogger("app.auth").setLevel(logging.INFO)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .config import settings
+from .debug_log import emit
 
 # Import for exception handler - must handle HTTPException so our custom 500 details are returned
 from fastapi import HTTPException
 from fastapi import Depends
-from .db import get_db
-from .routers import auth, companies, company_models, countries, mappings, models, regions, reports, reports_list, uploads
+from .db import check_db_connection, get_db
+from .routers import auth, companies, countries, mappings, models, regions, reports, reports_list, uploads
 from .routers import settings as settings_router
 from .schemas import HealthOut
 
 app = FastAPI(title="ORSA API - Own Risk And Solvency Assessment")
+
+
+@app.on_event("startup")
+def _startup_db_check() -> None:
+    # Don’t crash the server on boot; log clearly so deployment issues are obvious.
+    try:
+        check_db_connection()
+    except Exception:
+        logging.getLogger("app.db").exception("DB check failed on startup")
+        emit(
+            "app/main.py:_startup_db_check",
+            "DB check failed on startup",
+            hypothesis_id="A",
+            run_id="pre-fix",
+        )
 
 
 @app.exception_handler(HTTPException)
@@ -49,6 +68,17 @@ def handle_unhandled(request, exc: Exception):
         or "econnreset" in msg
         or "timeout" in msg
     ):
+        emit(
+            "app/main.py:handle_unhandled",
+            "Returning 503 due to DB/connectivity error",
+            data={
+                "path": request.url.path,
+                "error_type": name,
+                "error": str(exc)[:300],
+            },
+            hypothesis_id="A",
+            run_id="pre-fix",
+        )
         return JSONResponse(
             status_code=503,
             content={
@@ -168,6 +198,17 @@ def debug_app_db(db=Depends(get_db)):
             from psycopg import sql
 
             with db.cursor() as cur:
+                try:
+                    cur.execute("select current_database() as db, current_user as user")
+                    row = cur.fetchone()
+                    if isinstance(row, dict):
+                        info["current_database"] = row.get("db")
+                        info["current_user"] = row.get("user")
+                    elif row is not None:
+                        info["current_database"] = row[0]
+                        info["current_user"] = row[1]
+                except Exception:
+                    pass
                 for tbl, col in [("uploads", "uploads_count"), ("report_nodes", "report_nodes_count"), ("report_region_applicability", "report_region_applicability_count")]:
                     try:
                         cur.execute(
@@ -191,6 +232,5 @@ app.include_router(regions.router)
 app.include_router(countries.router)
 app.include_router(companies.router)
 app.include_router(settings_router.router)
-app.include_router(company_models.router)
 app.include_router(models.router)
 

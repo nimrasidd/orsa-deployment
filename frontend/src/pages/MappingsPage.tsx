@@ -9,13 +9,7 @@ import {
   getMappingItems,
   listMappings
 } from "../api/mappings";
-import {
-  listCompanyModels,
-  createCompanyModel,
-  deleteCompanyModel,
-  type CompanyModelOut
-} from "../api/companyModels";
-import { listAllCountries, type CountryOut } from "../api/regions";
+import { createModel, listAllModels, listAllCountries, type CountryOut, type ModelOut } from "../api/regions";
 import { useAuth } from "../auth/AuthContext";
 import { Badge } from "../components/Badge";
 import { Button } from "../components/Button";
@@ -38,12 +32,7 @@ function formatDate(iso: string) {
   }
 }
 
-function formatCreatedBy(m: CompanyModelOut): string {
-  const name = (m.created_by_name || "").trim();
-  const email = (m.created_by_email || "").trim();
-  if (name && email) return `${name} (${email})`;
-  if (name) return name;
-  if (email) return email;
+function formatCreatedBy(_: ModelOut): string {
   return "—";
 }
 
@@ -58,8 +47,8 @@ export function MappingsPage() {
   const [submitting, setSubmitting] = React.useState(false);
   const [tab, setTab] = React.useState<"models" | "list" | "view">("models");
 
-  // Company models (user's company - no region/country)
-  const [companyModels, setCompanyModels] = React.useState<CompanyModelOut[]>([]);
+  // Global models (application models)
+  const [companyModels, setCompanyModels] = React.useState<ModelOut[]>([]);
   const [modelId, setModelId] = React.useState("");
   const [showCreateModel, setShowCreateModel] = React.useState(false);
   const [newModelName, setNewModelName] = React.useState("");
@@ -118,7 +107,7 @@ export function MappingsPage() {
 
   React.useEffect(() => {
     if (!user) return;
-    listCompanyModels()
+    listAllModels()
       .then((data) => {
         const arr = Array.isArray(data) ? data : [];
         setCompanyModels(arr);
@@ -231,35 +220,8 @@ export function MappingsPage() {
     };
   }, [tab, viewMode, compareLeftId, compareRightId]);
 
-  async function handleDeleteModel(m: CompanyModelOut) {
-    if (!user?.is_admin) return;
-    if (
-      !window.confirm(
-        `Delete model “${m.name}”? All mappings for this model are removed. Uploads that used it keep data but lose model linkage. This cannot be undone.`
-      )
-    ) {
-      return;
-    }
-    setDeletingModelId(m.id);
-    try {
-      await deleteCompanyModel(m.id);
-      toast.success("Model deleted", { description: m.name });
-      if (modelId === m.id) {
-        setModelId("");
-        setMappings([]);
-        setViewMappingId(null);
-      }
-      const all = await listCompanyModels();
-      setCompanyModels(Array.isArray(all) ? all : []);
-    } catch (e: unknown) {
-      const msg =
-        e && typeof e === "object" && "message" in e
-          ? String((e as { message: unknown }).message)
-          : String(e);
-      toast.error("Failed to delete model", { description: msg });
-    } finally {
-      setDeletingModelId(null);
-    }
+  async function handleDeleteModel(_: ModelOut) {
+    toast.error("Model delete is not supported.");
   }
 
   async function handleDownloadMapping(configId: string) {
@@ -289,12 +251,9 @@ export function MappingsPage() {
     }
     setCreatingModel(true);
     try {
-      const created = await createCompanyModel({
-        name: newModelName.trim(),
-        country_id: newModelCountryId,
-      });
-      toast.success("Model created", { description: `${created.name} · ${created.country_name ?? "Country set"}` });
-      const all = await listCompanyModels();
+      const created = await createModel(newModelCountryId, newModelName.trim());
+      toast.success("Model created", { description: created.name });
+      const all = await listAllModels();
       setCompanyModels(Array.isArray(all) ? all : []);
       setModelId(created.id);
       setShowCreateModel(false);
@@ -457,7 +416,7 @@ export function MappingsPage() {
                   </div>
                   <Button
                     onClick={() => void handleCreateModel()}
-                    disabled={creatingModel || !newModelName.trim() || !newModelCountryId}
+                    disabled={creatingModel || !newModelName.trim()}
                   >
                     {creatingModel ? "Creating…" : "Create Model"}
                   </Button>

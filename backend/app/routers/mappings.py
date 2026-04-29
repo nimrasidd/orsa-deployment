@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import time
 import zipfile
 from io import BytesIO
 from typing import Annotated, Any
@@ -11,6 +12,7 @@ from xlrd.biffh import XLRDError
 
 from ..db import get_db
 from ..schemas import MappingItemOut, MappingOut
+from ..debug_log import emit
 from .auth import UserOut, get_current_user, require_admin
 from ..services.mapping_service import (
     extract_values_from_file,
@@ -22,51 +24,21 @@ from ..services.mapping_service import (
 router = APIRouter(prefix="/mappings", tags=["mappings"])
 
 
-def _company_has_model_access(db: Any, company_id: str | None, model_id: str) -> bool:
-    if not company_id:
-        return False
-    import sqlite3
-
-    if isinstance(db, sqlite3.Connection):
-        cur = db.execute(
-            "select 1 from company_model where company_id = ? and model_id = ? limit 1",
-            (company_id, model_id),
-        )
-        return cur.fetchone() is not None
-    with db.cursor() as cur:
-        cur.execute(
-            """
-            select 1 from public.company_model
-            where company_id = %(cid)s::uuid and model_id = %(mid)s::uuid
-            limit 1
-            """,
-            {"cid": company_id, "mid": model_id},
-        )
-        return cur.fetchone() is not None
-
-
 def _assert_model_for_user(db: Any, user: UserOut, model_id: str | None) -> None:
-    if not model_id or user.is_admin:
-        return
-    if not user.company_id or not _company_has_model_access(db, user.company_id, model_id):
-        raise HTTPException(status_code=403, detail="Model is not available for your company")
+    # Company-model access layer removed: any authenticated user may use any model_id.
+    return
 
 
 def _assert_mapping_for_user(db: Any, user: UserOut, config_id: str) -> None:
+    # Company-model access layer removed; mappings are visible by model_id filter only.
     if user.is_admin:
         return
-    import sqlite3
-
-    if isinstance(db, sqlite3.Connection):
-        cur = db.execute("select model_id from mapping where config_id = ? limit 1", (config_id,))
+    with db.cursor() as cur:
+        cur.execute(
+            "select model_id from public.mapping where config_id = %(id)s limit 1",
+            {"id": config_id},
+        )
         row = cur.fetchone()
-    else:
-        with db.cursor() as cur:
-            cur.execute(
-                "select model_id from public.mapping where config_id = %(id)s limit 1",
-                {"id": config_id},
-            )
-            row = cur.fetchone()
     if not row or row["model_id"] is None:
         raise HTTPException(status_code=404, detail="Mapping not found")
     _assert_model_for_user(db, user, str(row["model_id"]))
@@ -78,118 +50,10 @@ def fetch_mappings_list(
     restrict_company_id: str | None,
 ) -> list[Any]:
     """Shared list logic: restrict_company_id None = admin / all companies."""
-    import sqlite3
     from datetime import datetime
 
-    if isinstance(db, sqlite3.Connection):
-        if restrict_company_id:
-            if model_id:
-                cur = db.execute(
-                    """
-                    select m.config_id as id, m.model_id, m.name, m.version, m.is_active, m.uploaded_at, m.notes,
-                           count(*) as item_count
-                    from mapping m
-                    inner join models mod on mod.id = m.model_id
-                    inner join company_model cm on cm.model_id = mod.id and cm.company_id = ?
-                    where m.model_id = ?
-                    group by m.config_id, m.model_id, m.name, m.version, m.is_active, m.uploaded_at, m.notes
-                    order by m.uploaded_at desc
-                    """,
-                    (restrict_company_id, model_id),
-                )
-            else:
-                cur = db.execute(
-                    """
-                    select m.config_id as id, m.model_id, m.name, m.version, m.is_active, m.uploaded_at, m.notes,
-                           count(*) as item_count
-                    from mapping m
-                    inner join models mod on mod.id = m.model_id
-                    inner join company_model cm on cm.model_id = mod.id and cm.company_id = ?
-                    group by m.config_id, m.model_id, m.name, m.version, m.is_active, m.uploaded_at, m.notes
-                    order by m.uploaded_at desc
-                    """,
-                    (restrict_company_id,),
-                )
-        elif model_id:
-            cur = db.execute(
-                """
-                select config_id as id, model_id, name, version, is_active, uploaded_at, notes,
-                       count(*) as item_count
-                from mapping
-                where model_id = ?
-                group by config_id, model_id, name, version, is_active, uploaded_at, notes
-                order by uploaded_at desc
-                """,
-                (model_id,),
-            )
-        else:
-            cur = db.execute(
-                """
-                select config_id as id, model_id, name, version, is_active, uploaded_at, notes,
-                       count(*) as item_count
-                from mapping
-                group by config_id, model_id, name, version, is_active, uploaded_at, notes
-                order by uploaded_at desc
-                """
-            )
-        rows = cur.fetchall()
-        out = []
-        for r in rows:
-            r = dict(zip(r.keys(), r))
-            model_name = None
-            if r.get("model_id"):
-                mcur = db.execute(
-                    "select name from models where id = ?",
-                    (r["model_id"],),
-                )
-                mrow = mcur.fetchone()
-                model_name = mrow["name"] if mrow else None
-            out.append({
-                "id": r["id"],
-                "model_id": r.get("company_model_id") or r.get("model_id"),
-                "model_name": model_name,
-                "name": r["name"],
-                "version": r["version"],
-                "is_active": bool(r["is_active"]),
-                "uploaded_at": datetime.fromisoformat(r["uploaded_at"]),
-                "uploaded_by": None,
-                "notes": r["notes"],
-                "item_count": r["item_count"],
-            })
-        return out
-
     with db.cursor() as cur:
-        if restrict_company_id:
-            if model_id:
-                cur.execute(
-                    """
-                    select m.config_id as id, m.model_id, m.name, m.version, m.is_active, m.uploaded_at, m.notes,
-                           count(*) as item_count
-                    from public.mapping m
-                    inner join public.models mod on mod.id = m.model_id
-                    inner join public.company_model cm on cm.model_id = mod.id
-                        and cm.company_id = %(company_id)s::uuid
-                    where m.model_id = %(model_id)s::uuid
-                    group by m.config_id, m.model_id, m.name, m.version, m.is_active, m.uploaded_at, m.notes
-                    order by m.uploaded_at desc
-                    """,
-                    {"company_id": restrict_company_id, "model_id": model_id},
-                )
-            else:
-                cur.execute(
-                    """
-                    select m.config_id as id, m.model_id, m.name, m.version, m.is_active, m.uploaded_at, m.notes,
-                           count(*) as item_count
-                    from public.mapping m
-                    inner join public.models mod on mod.id = m.model_id
-                    inner join public.company_model cm on cm.model_id = mod.id
-                        and cm.company_id = %(company_id)s::uuid
-                    group by m.config_id, m.model_id, m.name, m.version, m.is_active, m.uploaded_at, m.notes
-                    order by m.uploaded_at desc
-                    """,
-                    {"company_id": restrict_company_id},
-                )
-        elif model_id:
+        if model_id:
             cur.execute(
                 """
                 select config_id as id, model_id, name, version, is_active, uploaded_at, notes,
@@ -213,10 +77,18 @@ def fetch_mappings_list(
             )
         rows = list(cur.fetchall())
         for r in rows:
+            # psycopg returns UUID objects for uuid columns; our response models use str.
+            rid = r.get("id")
+            if rid is not None and not isinstance(rid, str):
+                r["id"] = str(rid)
+            mid = r.get("model_id")
+            if mid is not None and not isinstance(mid, str):
+                r["model_id"] = str(mid)
             r["uploaded_by"] = None
             r["model_name"] = None
         if rows and any(r.get("model_id") for r in rows):
-            cur.execute("select id, name from public.models")
+            # Model labels come from application_models (global)
+            cur.execute("select id, name from public.application_models")
             model_labels = {str(r["id"]): r["name"] for r in cur.fetchall()}
             for r in rows:
                 if r.get("model_id"):
@@ -231,7 +103,7 @@ def list_mappings(
     model_id: Annotated[str | None, Query()] = None,
 ):
     """List mapping configurations for your company (or all if admin)."""
-    scope = None if user.is_admin else user.company_id
+    scope = None  # company scoping removed
     _assert_model_for_user(db, user, model_id)
     return fetch_mappings_list(db, model_id, scope)
 
@@ -247,13 +119,25 @@ async def create_mapping(
     uploaded_by: Annotated[str | None, Form()] = None,
 ):
     """Upload a new mapping Excel file for a model (model-based mapping)."""
+    t0 = time.monotonic()
     if not file.filename:
         raise HTTPException(status_code=400, detail="Missing filename")
     if not model_id:
         raise HTTPException(status_code=400, detail="Select a model first (Models tab).")
     _assert_model_for_user(db, user, model_id)
 
+    # #region agent log
+    emit(
+        "app/routers/mappings.py:create_mapping",
+        "Mapping upload start",
+        data={"filename": file.filename, "model_id": str(model_id) if model_id else None, "name": name},
+        hypothesis_id="M1",
+        run_id="pre-fix",
+    )
+    # #endregion
+
     data = await file.read()
+    t_read = time.monotonic()
     try:
         mapping_items = parse_mapping_excel(data)
     except (zipfile.BadZipFile, XLRDError):
@@ -267,6 +151,16 @@ async def create_mapping(
     if not mapping_items:
         raise HTTPException(status_code=400, detail="No mapping items found in file")
 
+    # #region agent log
+    emit(
+        "app/routers/mappings.py:create_mapping",
+        "Mapping parsed",
+        data={"bytes": len(data), "items": len(mapping_items), "ms_read": int((t_read - t0) * 1000), "ms_parse": int((time.monotonic() - t_read) * 1000)},
+        hypothesis_id="M2",
+        run_id="pre-fix",
+    )
+    # #endregion
+
     try:
         mapping_id = save_mapping_to_db(
             db,
@@ -277,7 +171,26 @@ async def create_mapping(
             notes=notes,
         )
     except Exception as e:  # noqa: BLE001
+        # #region agent log
+        emit(
+            "app/routers/mappings.py:create_mapping",
+            "Mapping save failed",
+            data={"error_type": type(e).__name__, "error": str(e)[:300]},
+            hypothesis_id="M3",
+            run_id="pre-fix",
+        )
+        # #endregion
         raise HTTPException(status_code=500, detail="Failed to save mapping") from e
+
+    # #region agent log
+    emit(
+        "app/routers/mappings.py:create_mapping",
+        "Mapping saved",
+        data={"mapping_id": mapping_id, "items": len(mapping_items), "ms_total": int((time.monotonic() - t0) * 1000)},
+        hypothesis_id="M4",
+        run_id="pre-fix",
+    )
+    # #endregion
 
     scope = None if user.is_admin else user.company_id
     mappings = fetch_mappings_list(db, model_id, scope)
@@ -321,6 +234,7 @@ def get_mapping_items(
     import sqlite3
     from datetime import datetime
 
+    t0 = time.monotonic()
     _assert_mapping_for_user(db, user, mapping_id)
     cfg = mapping_id
     if isinstance(db, sqlite3.Connection):
@@ -359,7 +273,25 @@ def get_mapping_items(
             """,
             {"config_id": cfg},
         )
-        return list(cur.fetchall())
+        rows = list(cur.fetchall())
+        # #region agent log
+        emit(
+            "app/routers/mappings.py:get_mapping_items",
+            "Mapping items fetched",
+            data={"mapping_id": cfg, "rows": len(rows), "ms": int((time.monotonic() - t0) * 1000)},
+            hypothesis_id="MI1",
+            run_id="pre-fix",
+        )
+        # #endregion
+        # psycopg returns UUID objects for uuid columns; MappingItemOut expects strings.
+        for r in rows:
+            rid = r.get("id")
+            if rid is not None and not isinstance(rid, str):
+                r["id"] = str(rid)
+            mid = r.get("mapping_id")
+            if mid is not None and not isinstance(mid, str):
+                r["mapping_id"] = str(mid)
+        return rows
 
 
 def _safe_mapping_export_filename(name: str, version: int) -> str:

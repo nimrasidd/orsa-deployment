@@ -18,20 +18,6 @@ class CreateModelIn(BaseModel):
 
 
 def _list_all_models(conn: Any) -> list[dict]:
-    import sqlite3
-
-    if isinstance(conn, sqlite3.Connection):
-        cur = conn.execute(
-            """
-            select m.id, m.country_id, m.name, c.name as country_name, r.name as region_name
-            from application_models m
-            join countries c on c.id = m.country_id
-            join regions r on r.id = c.region_id
-            order by r.name, c.name, m.name
-            """
-        )
-        return [dict(r) for r in cur.fetchall()]
-
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -60,49 +46,41 @@ def create_model(
     """Create a new application model for a country (admin only)."""
     country_id = body.country_id
     name = body.name
-    import sqlite3
     from uuid import uuid4
 
     name = name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="Model name is required")
 
-    if isinstance(db, sqlite3.Connection):
-        cur = db.execute(
-            "select id from countries where id = :cid",
-            {"cid": country_id},
-        )
-        if not cur.fetchone():
-            raise HTTPException(status_code=404, detail="Country not found")
-        cur = db.execute(
-            "select id from application_models where country_id = :cid and name = :name",
-            {"cid": country_id, "name": name},
-        )
-        if cur.fetchone():
-            raise HTTPException(status_code=404, detail="Model with this name already exists for this country")
-        model_id = str(uuid4())
-        db.execute(
-            "insert into application_models (id, country_id, name) values (:id, :country_id, :name)",
-            {"id": model_id, "country_id": country_id, "name": name},
-        )
+    try:
+        with db.cursor() as cur:
+            cur.execute("select id from public.countries where id = %(cid)s::uuid", {"cid": country_id})
+            if not cur.fetchone():
+                raise HTTPException(status_code=404, detail="Country not found")
+            cur.execute(
+                "select id from public.application_models where country_id = %(cid)s::uuid and name = %(name)s",
+                {"cid": country_id, "name": name},
+            )
+            if cur.fetchone():
+                raise HTTPException(status_code=404, detail="Model with this name already exists for this country")
+            cur.execute(
+                "insert into public.application_models (country_id, name) values (%(country_id)s::uuid, %(name)s) returning id",
+                {"country_id": country_id, "name": name},
+            )
+            model_id = cur.fetchone()["id"]
         db.commit()
-    else:
-        with db.transaction():
-            with db.cursor() as cur:
-                cur.execute("select id from public.countries where id = %(cid)s", {"cid": country_id})
-                if not cur.fetchone():
-                    raise HTTPException(status_code=404, detail="Country not found")
-                cur.execute(
-                    "select id from public.application_models where country_id = %(cid)s and name = %(name)s",
-                    {"cid": country_id, "name": name},
-                )
-                if cur.fetchone():
-                    raise HTTPException(status_code=404, detail="Model with this name already exists for this country")
-                cur.execute(
-                    "insert into public.application_models (country_id, name) values (%(country_id)s, %(name)s) returning id",
-                    {"country_id": country_id, "name": name},
-                )
-                model_id = cur.fetchone()["id"]
+    except HTTPException:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        raise
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        raise HTTPException(status_code=400, detail=f"Could not create model: {e}") from e
 
     models = _list_all_models(db)
     for m in models:

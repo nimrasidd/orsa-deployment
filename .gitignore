@@ -1,0 +1,25 @@
+# Local database/data directories
+db_data/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+.pytest_cache/
+
+# Node / frontend
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+
+# Local env files
+.env
+*.env
+.env.*
+
+# Logs
+*.log
+
+# Local DB files
+*.db
+

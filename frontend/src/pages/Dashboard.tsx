@@ -1,8 +1,7 @@
 import * as React from "react";
 import { listUploads } from "../api/uploads";
 import { getChartTable, type ChartTableData, type ChartTableRow, type PeriodGroup } from "../api/reports";
-import { listCompanies, type CompanyOut } from "../api/regions";
-import { listCompanyModels, type CompanyModelOut } from "../api/companyModels";
+import { listAllModels, listCompanies, type CompanyOut, type ModelOut } from "../api/regions";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
 import { HierarchyCodeCell } from "../components/HierarchyCodeCell";
@@ -78,7 +77,7 @@ export function Dashboard() {
   const [items, setItems] = React.useState<UploadOut[]>([]);
   const [loadError, setLoadError] = React.useState<string | null>(null);
 
-  const [models, setModels] = React.useState<CompanyModelOut[]>([]);
+  const [models, setModels] = React.useState<ModelOut[]>([]);
   const [companies, setCompanies] = React.useState<CompanyOut[]>([]);
   const [modelId, setModelId] = React.useState("");
   const [companyId, setCompanyId] = React.useState("");
@@ -202,28 +201,13 @@ export function Dashboard() {
     }
   }, [companyId, companies]);
 
-  // Mapping models (uploads.model_id) — all models for admin + “All companies”, else company-linked list
+  // Models are global (application models)
   React.useEffect(() => {
     let cancelled = false;
     const run = async () => {
       try {
-        if (!companyId) {
-          if (user?.is_admin) {
-            const data = await listCompanyModels();
-            if (!cancelled) setModels(Array.isArray(data) ? data : []);
-          } else {
-            if (!cancelled) {
-              setModels([]);
-              setModelId("");
-            }
-          }
-          return;
-        }
-        const data = await listCompanyModels(companyId);
-        if (!cancelled) {
-          setModels(Array.isArray(data) ? data : []);
-          setModelId("");
-        }
+        const data = await listAllModels();
+        if (!cancelled) setModels(Array.isArray(data) ? data : []);
       } catch {
         if (!cancelled) setModels([]);
       }
@@ -232,7 +216,7 @@ export function Dashboard() {
     return () => {
       cancelled = true;
     };
-  }, [companyId, user?.is_admin]);
+  }, [user?.id]);
 
   const selectedModel = React.useMemo(
     () => models.find((m) => m.id === modelId),

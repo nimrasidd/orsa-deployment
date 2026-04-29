@@ -27,10 +27,16 @@ export async function createSettingsUser(input: {
   });
 }
 
-export async function updateUserCompany(userId: string, company_id: string): Promise<UserListOut> {
+export async function updateUserCompany(userId: string, company_id: string | null): Promise<UserListOut> {
   return apiFetch<UserListOut>(`/settings/users/${encodeURIComponent(userId)}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ company_id }),
+  });
+}
+
+export async function deleteSettingsUser(userId: string): Promise<{ ok: boolean }> {
+  return apiFetch<{ ok: boolean }>(`/settings/users/${encodeURIComponent(userId)}`, {
+    method: "DELETE",
   });
 }

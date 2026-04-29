@@ -3,9 +3,8 @@ import { useDropzone } from "react-dropzone";
 import { toast } from "sonner";
 import { createUpload, previewUpload } from "../api/uploads";
 import { listMappings } from "../api/mappings";
-import { listCompanyModels, type CompanyModelOut } from "../api/companyModels";
 import type { MappingOut } from "../types";
-import { listCompanies, type CompanyOut } from "../api/regions";
+import { listAllModels, listCompanies, type CompanyOut, type ModelOut } from "../api/regions";
 import { useAuth } from "../auth/AuthContext";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
@@ -39,7 +38,7 @@ export function UploadPage() {
   /** "manual" or mapping config_id (uuid). */
   const [extractionMode, setExtractionMode] = React.useState<"manual" | string>("manual");
 
-  const [companyModels, setCompanyModels] = React.useState<CompanyModelOut[]>([]);
+  const [companyModels, setCompanyModels] = React.useState<ModelOut[]>([]);
   const [modelId, setModelId] = React.useState("");
   const [reportYear, setReportYear] = React.useState<number | "">(new Date().getFullYear());
   const [reportMonth, setReportMonth] = React.useState<number | "">(new Date().getMonth() + 1);
@@ -100,16 +99,8 @@ export function UploadPage() {
     if (!user) return;
     let cancelled = false;
     const run = async () => {
-      const companyForModels = user.is_admin
-        ? uploadCompanyId || undefined
-        : user.company_id || undefined;
-      if (!companyForModels) {
-        setCompanyModels([]);
-        setModelId("");
-        return;
-      }
       try {
-        const data = await listCompanyModels(companyForModels);
+        const data = await listAllModels();
         if (cancelled) return;
         const arr = Array.isArray(data) ? data : [];
         setCompanyModels(arr);
@@ -125,7 +116,7 @@ export function UploadPage() {
     return () => {
       cancelled = true;
     };
-  }, [user?.id, user?.is_admin, user?.company_id, uploadCompanyId]);
+  }, [user?.id]);
 
   const derivedReportKey = React.useMemo(() => {
     if (!modelId || !reportYear || !reportMonth) return "";

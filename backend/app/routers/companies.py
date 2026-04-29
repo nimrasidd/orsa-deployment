@@ -30,7 +30,7 @@ def _get_company_by_id(conn: Any, company_id: str) -> dict | None:
         return dict(row) if row else None
     with conn.cursor() as cur:
         cur.execute(
-            "select id, name, region_id, country_id from public.companies where id = %(id)s",
+            "select id::text as id, name, region_id::text as region_id, country_id::text as country_id from public.companies where id = %(id)s::uuid",
             {"id": company_id},
         )
         row = cur.fetchone()
@@ -53,11 +53,11 @@ def _list_companies(conn: Any, region_id: str | None = None) -> list[dict]:
     with conn.cursor() as cur:
         if region_id:
             cur.execute(
-                "select id, name, region_id, country_id from public.companies where region_id = %(region_id)s order by name",
+                "select id::text as id, name, region_id::text as region_id, country_id::text as country_id from public.companies where region_id = %(region_id)s::uuid order by name",
                 {"region_id": region_id},
             )
         else:
-            cur.execute("select id, name, region_id, country_id from public.companies order by name")
+            cur.execute("select id::text as id, name, region_id::text as region_id, country_id::text as country_id from public.companies order by name")
         return list(cur.fetchall())
 
 
@@ -133,6 +133,7 @@ def create_company(
     if body.country_id:
         _ensure_country_in_region(db, body.country_id, body.region_id)
 
+    # SQLite uses string IDs like "co-xxxx"; Postgres uses UUID primary keys.
     company_id = f"co-{uuid4().hex[:12]}"
 
     if isinstance(db, sqlite3.Connection):
@@ -141,16 +142,6 @@ def create_company(
                 "insert into companies (id, name, region_id, country_id) values (?, ?, ?, ?)",
                 (company_id, name, body.region_id, body.country_id),
             )
-            try:
-                db.execute(
-                    """
-                    insert or ignore into company_model (company_id, model_id)
-                    select ?, id from models
-                    """,
-                    (company_id,),
-                )
-            except sqlite3.OperationalError:
-                pass
             db.commit()
         except Exception as e:
             db.rollback()
@@ -163,41 +154,89 @@ def create_company(
         )
         row = cur.fetchone()
         return CompanyOut(**dict(row))
-    with db.transaction():
+
+    # Postgres path
+    company_uuid = str(uuid4())
+    try:
         with db.cursor() as cur:
-            try:
-                cur.execute(
-                    """
-                    insert into public.companies (id, name, region_id, country_id)
-                    values (%(id)s, %(name)s, %(region_id)s, %(country_id)s)
-                    """,
-                    {
-                        "id": company_id,
-                        "name": name,
-                        "region_id": body.region_id,
-                        "country_id": body.country_id,
-                    },
-                )
-                try:
-                    cur.execute(
-                        """
-                        insert into public.company_model (company_id, model_id)
-                        select %(cid)s::uuid, m.id from public.models m
-                        on conflict do nothing
-                        """,
-                        {"cid": company_id},
-                    )
-                except Exception:
-                    pass
-            except Exception as e:
-                msg = str(e).lower()
-                if "unique" in msg or "duplicate" in msg:
-                    raise HTTPException(status_code=400, detail="A company with this name already exists in this region") from e
-                raise HTTPException(status_code=400, detail=f"Could not create company: {e}") from e
-    with db.cursor() as cur:
-        cur.execute(
-            "select id, name, region_id, country_id from public.companies where id = %(id)s",
-            {"id": company_id},
-        )
-        row = cur.fetchone()
-        return CompanyOut(**dict(row))
+            cur.execute(
+                """
+                insert into public.companies (id, name, region_id, country_id)
+                values (%(id)s::uuid, %(name)s, %(region_id)s::uuid, %(country_id)s::uuid)
+                """,
+                {
+                    "id": company_uuid,
+                    "name": name,
+                    "region_id": body.region_id,
+                    "country_id": body.country_id,
+                },
+            )
+        db.commit()
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        msg = str(e).lower()
+        if "unique" in msg or "duplicate" in msg:
+            raise HTTPException(status_code=400, detail="A company with this name already exists in this region") from e
+        raise HTTPException(status_code=400, detail=f"Could not create company: {e}") from e
+
+    row = _get_company_by_id(db, company_uuid)
+    if not row:
+        raise HTTPException(status_code=500, detail="Company created but not found")
+    return CompanyOut(**dict(row))
+
+
+@router.delete("/{company_id}")
+def delete_company(
+    company_id: str,
+    db: Annotated[Any, Depends(get_db)],
+    _: Annotated[UserOut, Depends(require_admin)],
+):
+    """Delete a company (admin only). Fails if any users are assigned to it."""
+    import sqlite3
+
+    if isinstance(db, sqlite3.Connection):
+        cur = db.execute("select count(*) as n from users where company_id = ?", (company_id,))
+        n = int(dict(cur.fetchone())["n"])  # type: ignore[index]
+        if n > 0:
+            raise HTTPException(status_code=400, detail="Cannot delete: users are still assigned to this company")
+        cur = db.execute("delete from companies where id = ?", (company_id,))
+        db.commit()
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Company not found")
+        return {"ok": True}
+
+    # For psycopg3, be explicit about commit/rollback to ensure the delete persists.
+    try:
+        with db.cursor() as cur:
+            cur.execute(
+                "select count(*) as n from public.users where company_id = %(cid)s::uuid",
+                {"cid": company_id},
+            )
+            row = cur.fetchone()
+            n = int(row["n"]) if row and "n" in row else 0
+            if n > 0:
+                raise HTTPException(status_code=400, detail="Cannot delete: users are still assigned to this company")
+
+            cur.execute(
+                "delete from public.companies where id = %(cid)s::uuid",
+                {"cid": company_id},
+            )
+            if cur.rowcount == 0:
+                raise HTTPException(status_code=404, detail="Company not found")
+        db.commit()
+    except HTTPException:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        raise
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        raise HTTPException(status_code=400, detail=f"Could not delete company: {e}") from e
+    return {"ok": True}

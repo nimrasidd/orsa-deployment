@@ -2,6 +2,7 @@ import * as React from "react";
 import { toast } from "sonner";
 import {
   createCompany,
+  deleteCompany,
   listCompanies,
   listCountriesByRegion,
   listRegions,
@@ -9,7 +10,7 @@ import {
   type CountryOut,
   type RegionOut
 } from "../api/regions";
-import { createSettingsUser, listSettingsUsers, updateUserCompany, type UserListOut } from "../api/settings";
+import { createSettingsUser, deleteSettingsUser, listSettingsUsers, updateUserCompany, type UserListOut } from "../api/settings";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
 import { Input } from "../components/Input";
@@ -166,6 +167,64 @@ export function SettingsPage() {
     }
   }
 
+  async function handleCompanyUnmap(targetUserId: string) {
+    setMappingUserId(targetUserId);
+    try {
+      await updateUserCompany(targetUserId, null);
+      toast.success("User unmapped");
+      await refresh();
+    } catch (e: unknown) {
+      const msg =
+        e && typeof e === "object" && "detail" in e
+          ? String((e as { detail: unknown }).detail)
+          : String(e);
+      toast.error("Could not unmap user", { description: msg });
+    } finally {
+      setMappingUserId(null);
+    }
+  }
+
+  async function handleDeleteUser(targetUserId: string, email: string) {
+    if (!window.confirm(`Delete user ${email}? This cannot be undone.`)) return;
+    setMappingUserId(targetUserId);
+    try {
+      await deleteSettingsUser(targetUserId);
+      toast.success("User deleted");
+      await refresh();
+    } catch (e: unknown) {
+      const msg =
+        e && typeof e === "object" && "detail" in e
+          ? String((e as { detail: unknown }).detail)
+          : String(e);
+      toast.error("Could not delete user", { description: msg });
+    } finally {
+      setMappingUserId(null);
+    }
+  }
+
+  async function handleDeleteCompany(companyId: string, name: string) {
+    const assigned = users.filter((u) => u.company_id === companyId).length;
+    if (assigned > 0) {
+      toast.error("Cannot delete company", { description: "Unmap or delete assigned users first." });
+      return;
+    }
+    if (!window.confirm(`Delete company ${name}? This cannot be undone.`)) return;
+    setSavingCo(true);
+    try {
+      await deleteCompany(companyId);
+      toast.success("Company deleted");
+      await refresh();
+    } catch (e: unknown) {
+      const msg =
+        e && typeof e === "object" && "detail" in e
+          ? String((e as { detail: unknown }).detail)
+          : String(e);
+      toast.error("Could not delete company", { description: msg });
+    } finally {
+      setSavingCo(false);
+    }
+  }
+
   const selectCls =
     "h-10 rounded-lg bg-white/5 px-3 text-sm text-slate-100 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-sky-400/60";
 
@@ -226,17 +285,40 @@ export function SettingsPage() {
                     <th className="px-4 py-2.5 font-medium">Name</th>
                     <th className="px-4 py-2.5 font-medium">Region</th>
                     <th className="px-4 py-2.5 font-medium">Country id</th>
+                    <th className="px-4 py-2.5 font-medium">Actions</th>
                     <th className="px-4 py-2.5 font-medium font-mono text-xs">ID</th>
                   </tr>
                 </thead>
                 <tbody className="text-slate-200">
                   {companies.map((c) => (
+                    (() => {
+                      const assignedCount = users.filter((u) => u.company_id === c.id).length;
+                      const canDelete = assignedCount === 0;
+                      return (
                     <tr key={c.id} className="border-t border-white/10">
                       <td className="px-4 py-2.5 font-medium text-slate-100">{c.name}</td>
                       <td className="px-4 py-2.5 text-slate-400">{regionName(c.region_id)}</td>
                       <td className="px-4 py-2.5 font-mono text-xs text-slate-500">{c.country_id ?? "—"}</td>
+                      <td className="px-4 py-2.5">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          disabled={!canDelete || savingCo}
+                          onClick={() => void handleDeleteCompany(c.id, c.name)}
+                          title={
+                            canDelete
+                              ? "Delete company"
+                              : `Cannot delete: ${assignedCount} user(s) assigned`
+                          }
+                        >
+                          Delete
+                        </Button>
+                      </td>
                       <td className="px-4 py-2.5 font-mono text-xs text-slate-500">{c.id}</td>
                     </tr>
+                      );
+                    })()
                   ))}
                 </tbody>
               </table>
@@ -291,6 +373,7 @@ export function SettingsPage() {
                     <th className="px-4 py-2.5 font-medium">Email</th>
                     <th className="px-4 py-2.5 font-medium">Company</th>
                     <th className="px-4 py-2.5 font-medium">Map to company</th>
+                    <th className="px-4 py-2.5 font-medium">Actions</th>
                     <th className="px-4 py-2.5 font-medium">Registered</th>
                   </tr>
                 </thead>
@@ -320,6 +403,30 @@ export function SettingsPage() {
                             <option key={c.id} value={c.id}>{c.name}</option>
                           ))}
                         </select>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            disabled={mappingUserId === u.id || !u.company_id}
+                            onClick={() => void handleCompanyUnmap(u.id)}
+                            title={u.company_id ? "Unmap user from company" : "User is already unmapped"}
+                          >
+                            Unmap
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            disabled={mappingUserId === u.id || !!u.company_id}
+                            onClick={() => void handleDeleteUser(u.id, u.email)}
+                            title={u.company_id ? "Unmap user first, then delete" : "Delete user"}
+                          >
+                            Delete
+                          </Button>
+                        </div>
                       </td>
                       <td className="whitespace-nowrap px-4 py-2.5 text-xs text-slate-500">{formatWhen(u.created_at)}</td>
                     </tr>

@@ -1,8 +1,7 @@
 import * as React from "react";
 import { deleteUpload, listUploads } from "../api/uploads";
 import { ApiError } from "../api/http";
-import { listCompanies, type CompanyOut } from "../api/regions";
-import { listCompanyModels, type CompanyModelOut } from "../api/companyModels";
+import { listAllModels, listCompanies, type CompanyOut, type ModelOut } from "../api/regions";
 import { Badge } from "../components/Badge";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
@@ -32,7 +31,7 @@ export function ReportsPage() {
   const [items, setItems] = React.useState<UploadOut[]>([]);
   const [loadError, setLoadError] = React.useState<string | null>(null);
 
-  const [models, setModels] = React.useState<CompanyModelOut[]>([]);
+  const [models, setModels] = React.useState<ModelOut[]>([]);
   const [companies, setCompanies] = React.useState<CompanyOut[]>([]);
   const [modelId, setModelId] = React.useState("");
   const [companyId, setCompanyId] = React.useState("");
@@ -95,28 +94,13 @@ export function ReportsPage() {
     }
   }, [companyId, companies]);
 
-  /** Mapping models (uploads.model_id) — same as Dashboard / Upload, not application_models. */
+  /** Models are global (application models). */
   React.useEffect(() => {
     let cancelled = false;
     const run = async () => {
       try {
-        if (!companyId) {
-          if (user?.is_admin) {
-            const data = await listCompanyModels();
-            if (!cancelled) setModels(Array.isArray(data) ? data : []);
-          } else {
-            if (!cancelled) {
-              setModels([]);
-              setModelId("");
-            }
-          }
-          return;
-        }
-        const data = await listCompanyModels(companyId);
-        if (!cancelled) {
-          setModels(Array.isArray(data) ? data : []);
-          setModelId("");
-        }
+        const data = await listAllModels();
+        if (!cancelled) setModels(Array.isArray(data) ? data : []);
       } catch {
         if (!cancelled) setModels([]);
       }
@@ -125,7 +109,7 @@ export function ReportsPage() {
     return () => {
       cancelled = true;
     };
-  }, [companyId, user?.is_admin]);
+  }, [user?.id]);
 
   function getCompanyName(upload: UploadOut): string {
     if (!upload.company_id) return "—";
