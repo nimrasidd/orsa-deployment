@@ -66,6 +66,7 @@ export type ModelOut = {
   name: string;
   country_name: string;
   region_name: string;
+  created_at?: string | null;
 };
 
 export async function listAllModels(): Promise<ModelOut[]> {
@@ -77,5 +78,11 @@ export async function createModel(countryId: string, name: string): Promise<Mode
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ country_id: countryId, name: name.trim() }),
+  });
+}
+
+export async function deleteModel(modelId: string): Promise<void> {
+  return apiFetch(`/models/${encodeURIComponent(modelId)}`, {
+    method: "DELETE",
   });
 }

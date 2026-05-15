@@ -20,11 +20,12 @@ from .debug_log import emit
 from fastapi import HTTPException
 from fastapi import Depends
 from .db import check_db_connection, get_db
+from .routers import access_requests  # pyright: ignore[reportAttributeAccessIssue]
 from .routers import auth, companies, countries, mappings, models, regions, reports, reports_list, uploads
 from .routers import settings as settings_router
 from .schemas import HealthOut
 
-app = FastAPI(title="ORSA API - Own Risk And Solvency Assessment")
+app = FastAPI(title="Solvency Dashboard API")
 
 
 @app.on_event("startup")
@@ -119,7 +120,7 @@ def health() -> HealthOut:
 @app.get("/")
 def root():
     """Root redirect/info."""
-    return {"message": "ORSA API - Own Risk And Solvency Assessment", "docs": "/docs", "health": "/health"}
+    return {"message": "Solvency Dashboard API", "docs": "/docs", "health": "/health"}
 
 
 @app.get("/debug")
@@ -223,6 +224,7 @@ def debug_app_db(db=Depends(get_db)):
     return info
 
 
+app.include_router(access_requests.router)
 app.include_router(auth.router)
 app.include_router(uploads.router)
 app.include_router(reports.router)

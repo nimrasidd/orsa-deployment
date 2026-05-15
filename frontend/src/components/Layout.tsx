@@ -29,8 +29,8 @@ export function Layout() {
               <Shield className="h-5 w-5 text-sky-300" />
             </div>
             <div>
-              <div className="text-sm font-semibold tracking-wide text-slate-100">ORSA</div>
-              <div className="text-xs text-slate-400">Own Risk And Solvency Assessment</div>
+              <div className="text-sm font-semibold tracking-wide text-slate-100">Solvency Dashboard</div>
+              <div className="text-xs text-slate-400">Own Risk and Solvency Assessment</div>
             </div>
           </div>
 

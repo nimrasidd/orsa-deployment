@@ -3,7 +3,9 @@ import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import { Layout } from "./components/Layout";
 import { Dashboard } from "./pages/Dashboard";
+import { AboutPage } from "./pages/AboutPage";
 import { LoginPage } from "./pages/LoginPage";
+import { RequestAccessPage } from "./pages/RequestAccessPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { UploadPage } from "./pages/UploadPage";
 import { UploadDetail } from "./pages/UploadDetail";
@@ -51,6 +53,8 @@ export function App() {
       <WorkspaceProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/about" element={<AboutPage />} />
+          <Route path="/request-access" element={<RequestAccessPage />} />
           <Route
             path="/"
             element={

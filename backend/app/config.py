@@ -17,6 +17,18 @@ class Settings(BaseSettings):
     cors_origins: str = "*"  # comma-separated, or "*"
     secret_key: str = Field(default="dev-secret-change-in-production", alias="SECRET_KEY")  # for JWT signing
 
+    # Public "request access" form → email via SMTP (Office 365, Google Workspace, etc.).
+    smtp_host: str = Field(default="", alias="SMTP_HOST")
+    smtp_port: int = Field(default=587, alias="SMTP_PORT")
+    smtp_user: str = Field(default="", alias="SMTP_USER")
+    smtp_password: str = Field(default="", alias="SMTP_PASSWORD")
+    smtp_from: str = Field(default="", alias="SMTP_FROM")  # From address shown to recipients
+    access_request_email_to: str = Field(
+        default="",
+        alias="ACCESS_REQUEST_EMAIL_TO",
+        description="Comma-separated recipient addresses for access-request notifications.",
+    )
+
 
 settings = Settings()
 

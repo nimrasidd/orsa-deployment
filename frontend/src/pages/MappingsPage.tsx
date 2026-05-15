@@ -9,7 +9,7 @@ import {
   getMappingItems,
   listMappings
 } from "../api/mappings";
-import { createModel, listAllModels, listAllCountries, type CountryOut, type ModelOut } from "../api/regions";
+import { createModel, deleteModel, listAllModels, listAllCountries, type CountryOut, type ModelOut } from "../api/regions";
 import { useAuth } from "../auth/AuthContext";
 import { Badge } from "../components/Badge";
 import { Button } from "../components/Button";
@@ -220,8 +220,25 @@ export function MappingsPage() {
     };
   }, [tab, viewMode, compareLeftId, compareRightId]);
 
-  async function handleDeleteModel(_: ModelOut) {
-    toast.error("Model delete is not supported.");
+  async function handleDeleteModel(model: ModelOut) {
+    if (!confirm(`Delete model "${model.name}" and all of its mappings? This cannot be undone.`)) return;
+    setDeletingModelId(model.id);
+    try {
+      await deleteModel(model.id);
+      toast.success("Model deleted", { description: model.name });
+      const all = await listAllModels();
+      setCompanyModels(Array.isArray(all) ? all : []);
+      if (modelId === model.id) {
+        setModelId("");
+        setTab("list");
+      }
+    } catch (e: any) {
+      toast.error("Failed to delete model", {
+        description: e?.detail ? String(e.detail) : String(e?.message ?? e),
+      });
+    } finally {
+      setDeletingModelId(null);
+    }
   }
 
   async function handleDownloadMapping(configId: string) {

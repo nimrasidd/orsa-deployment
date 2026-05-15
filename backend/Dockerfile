@@ -2,13 +2,8 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# System deps (often needed for some python wheels)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-  && rm -rf /var/lib/apt/lists/*
-
 COPY requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+RUN python -m pip install --no-cache-dir -r requirements.txt -v --timeout 30 --retries 1
 
 COPY app ./app
 

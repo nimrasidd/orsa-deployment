@@ -87,3 +87,55 @@ def create_model(
         if str(m["id"]) == str(model_id):
             return m
     raise HTTPException(status_code=500, detail="Model created but not found")
+
+
+@router.delete("/{model_id}", status_code=204)
+def delete_model(
+    model_id: str,
+    db: Annotated[Any, Depends(get_db)],
+    _: Annotated[UserOut, Depends(require_admin)],
+):
+    """Delete an application model and its mapping configurations (admin only)."""
+    try:
+        with db.cursor() as cur:
+            cur.execute(
+                "select id from public.application_models where id = %(id)s::uuid",
+                {"id": model_id},
+            )
+            if not cur.fetchone():
+                raise HTTPException(status_code=404, detail="Model not found")
+
+            cur.execute(
+                "select count(*) as n from public.uploads where model_id = %(id)s::uuid",
+                {"id": model_id},
+            )
+            upload_count = int(cur.fetchone()["n"])
+            if upload_count > 0:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Model has {upload_count} upload(s). Remove or reassign them before deleting the model.",
+                )
+
+            cur.execute(
+                "delete from public.mapping where model_id = %(id)s::uuid",
+                {"id": model_id},
+            )
+            cur.execute(
+                "delete from public.application_models where id = %(id)s::uuid",
+                {"id": model_id},
+            )
+            if cur.rowcount == 0:
+                raise HTTPException(status_code=404, detail="Model not found")
+        db.commit()
+    except HTTPException:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        raise
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        raise HTTPException(status_code=400, detail=f"Could not delete model: {e}") from e
