@@ -20,8 +20,8 @@ from .debug_log import emit
 from fastapi import HTTPException
 from fastapi import Depends
 from .db import check_db_connection, get_db
-from .routers import access_requests  # pyright: ignore[reportAttributeAccessIssue]
 from .routers import auth, companies, countries, mappings, models, regions, reports, reports_list, uploads
+from .routers.access_requests import router as access_requests_router
 from .routers import settings as settings_router
 from .schemas import HealthOut
 
@@ -224,7 +224,7 @@ def debug_app_db(db=Depends(get_db)):
     return info
 
 
-app.include_router(access_requests.router)
+app.include_router(access_requests_router)
 app.include_router(auth.router)
 app.include_router(uploads.router)
 app.include_router(reports.router)

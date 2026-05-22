@@ -26,6 +26,7 @@ export default defineConfig(({ mode }) => {
       proxy: {
         "/health": { ...proxyTarget, timeout: 15000 },
         "/auth": { ...proxyTarget, timeout: 15000 },
+        "/access-request": { ...proxyTarget, timeout: 15000 },
         "/settings": { ...proxyTarget, timeout: 15000 },
         "/uploads": { ...proxyTarget, timeout: 60000 },
         // Mapping uploads can involve large Excel parsing + many inserts; allow longer.

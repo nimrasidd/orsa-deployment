@@ -16,10 +16,17 @@ frontend/dist/
 .env
 *.env
 .env.*
+!backend/.env.docker.example
 
 # Logs
 *.log
 
 # Local DB files
 *.db
+*.dump
+
+# Deploy artifacts / backups
+*.tar
+docker-compose.yml.save
+debug-*.log
 

@@ -1,0 +1,155 @@
+# Git-based deployment
+
+Push from your **Windows dev machine** → pull on a **new Linux folder**.  
+Leave the old tar deployment (`~/orsa-solvency`) running as-is.
+
+| Location | Role |
+|----------|------|
+| Windows: `osra ui` | Develop, commit, `git push` |
+| GitHub: `nimrasidd/orsa-deployment` | `main` branch |
+| Linux: `~/osra-app` | **New** git clone — `git pull` + Docker here |
+| Linux: `~/orsa-solvency` | **Old** tar deploy — do not change |
+
+---
+
+## Part 1 — This project (Windows) → GitHub
+
+Remote is already configured:
+
+```text
+origin  https://github.com/nimrasidd/orsa-deployment.git
+branch  main
+```
+
+### Every time you change code locally
+
+```powershell
+cd "D:\OneDrive - SIR Consultants (Pvt.) Ltd\osra\osra ui"
+
+git add -A
+git status
+# Confirm: no .env, no __pycache__, no *.db / *.dump / *.tar
+
+git commit -m "Short description of your change"
+git push origin main
+```
+
+### First-time push (if GitHub is behind your PC)
+
+Same commands as above. GitHub must have your latest code before the server can pull it.
+
+---
+
+## Docker Compose files
+
+| File | Use |
+|------|-----|
+| `docker-compose.yml` | **Local dev** — Vite dev server, debug log mount, Postgres on host port 5432 |
+| `docker-compose.prod.yml` | **Linux server** — built frontend + nginx, `restart: unless-stopped`, DB internal only |
+
+`scripts/deploy.sh` uses **`docker-compose.prod.yml`** by default on the server.
+
+Override ports (e.g. if old deploy still uses 5173):
+
+```bash
+# ~/osra-app/.env (optional, not in git)
+POSTGRES_PASSWORD=your-db-password
+FRONTEND_PORT=5174
+BACKEND_PORT=8001
+```
+
+---
+
+## Part 2 — New Linux deployment (git clone)
+
+Use a **different folder** from the old one so nothing in `~/orsa-solvency` is modified.
+
+### One-time setup on `tm42`
+
+```bash
+# 1) Clone into NEW directory
+cd ~
+git clone https://github.com/nimrasidd/orsa-deployment.git osra-app
+cd ~/osra-app
+git checkout main
+
+# 2) Server env (not in git) — copy from old deploy OR use template
+cp ~/orsa-solvency/backend/.env.docker backend/.env.docker
+# OR:
+# cp backend/.env.docker.example backend/.env.docker
+# nano backend/.env.docker   # set CORS_ORIGINS to your server IP/hostname
+
+# 3) Ports: if old ~/orsa-solvency still uses 5173/8000, set in ~/osra-app/.env:
+#    FRONTEND_PORT=5174
+#    BACKEND_PORT=8001
+
+# 4) Start (uses docker-compose.prod.yml)
+chmod +x scripts/deploy.sh
+./scripts/deploy.sh
+```
+
+### Git auth on the server (once)
+
+```bash
+cd ~/osra-app
+git pull origin main
+# Use GitHub username + Personal Access Token (HTTPS)
+```
+
+Or SSH (recommended):
+
+```bash
+ssh-keygen -t ed25519 -f ~/.ssh/osra_deploy -N ""
+cat ~/.ssh/osra_deploy.pub
+# GitHub → repo → Settings → Deploy keys → Add (read-only OK)
+
+cd ~/osra-app
+git remote set-url origin git@github.com:nimrasidd/orsa-deployment.git
+```
+
+### Database: use old data or fresh DB
+
+- **Same data as old deploy:** copy `backend/.env.docker` from `~/orsa-solvency` (same `DATABASE_URL` / password). Run only **one** Postgres container (either old or new compose), or point `DATABASE_URL` at the old `db` host/port.
+- **Fresh DB on new stack:** use new compose Postgres; run SQL from `supabase/all_in_one.sql` in the new database.
+
+---
+
+## Part 3 — Day-to-day (local → server)
+
+**Windows:**
+
+```powershell
+git push origin main
+```
+
+**Linux (`~/osra-app` only):**
+
+```bash
+cd ~/osra-app
+./scripts/deploy.sh
+```
+
+That script runs `git pull` and `docker compose -f docker-compose.prod.yml up -d --build`.
+
+---
+
+## Ports checklist (old + new both running)
+
+| Service | Old `~/orsa-solvency` | New `~/osra-app` (if both up) |
+|---------|------------------------|-------------------------------|
+| Frontend | 5173 | 5174 (change in compose) |
+| Backend | 8000 | 8001 |
+| Postgres | 5432 | 5433 or share one DB |
+
+When you retire the old deploy: `cd ~/orsa-solvency && docker compose down`, then use default ports in `~/osra-app`.
+
+---
+
+## Troubleshooting
+
+| Issue | Fix |
+|--------|-----|
+| `git pull` fails auth | PAT or SSH deploy key |
+| `backend/.env.docker` missing | `cp` from `~/orsa-solvency` or `.env.docker.example` |
+| Port already allocated | Set `FRONTEND_PORT` / `BACKEND_PORT` in `~/osra-app/.env` or stop old containers |
+| API 404 from browser | Prod uses nginx proxy; use `docker-compose.prod.yml`, not dev compose |

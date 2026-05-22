@@ -1,3 +1,4 @@
+# Local development only. On Linux server use: docker compose -f docker-compose.prod.yml up -d
 services:
   db:
     image: postgres:18-alpine
