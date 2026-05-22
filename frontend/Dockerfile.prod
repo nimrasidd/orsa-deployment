@@ -7,7 +7,9 @@ RUN npm ci
 
 COPY . .
 
-# Same-origin API: nginx proxies /auth, /uploads, etc. to the backend container.
+# Host node_modules (if present) must not land in the image; ensure bin stubs are executable.
+RUN chmod -R +x node_modules/.bin 2>/dev/null || true
+
 ENV VITE_API_BASE_URL=
 RUN npm run build
 

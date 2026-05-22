@@ -45,18 +45,9 @@ Same commands as above. GitHub must have your latest code before the server can 
 | File | Use |
 |------|-----|
 | `docker-compose.yml` | **Local dev** — Vite dev server, debug log mount, Postgres on host port 5432 |
-| `docker-compose.prod.yml` | **Linux server** — built frontend + nginx, `restart: unless-stopped`, DB internal only |
+| `docker-compose.prod.yml` | **Linux server** — frontend **5174**, backend **8001**, Postgres password `abc123` |
 
 `scripts/deploy.sh` uses **`docker-compose.prod.yml`** by default on the server.
-
-Override ports (e.g. if old deploy still uses 5173):
-
-```bash
-# ~/osra-app/.env (optional, not in git)
-POSTGRES_PASSWORD=your-db-password
-FRONTEND_PORT=5174
-BACKEND_PORT=8001
-```
 
 ---
 
@@ -77,13 +68,9 @@ git checkout main
 cp ~/orsa-solvency/backend/.env.docker backend/.env.docker
 # OR:
 # cp backend/.env.docker.example backend/.env.docker
-# nano backend/.env.docker   # set CORS_ORIGINS to your server IP/hostname
+# nano backend/.env.docker   # CORS_ORIGINS=http://YOUR_IP:5174
 
-# 3) Ports: if old ~/orsa-solvency still uses 5173/8000, set in ~/osra-app/.env:
-#    FRONTEND_PORT=5174
-#    BACKEND_PORT=8001
-
-# 4) Start (uses docker-compose.prod.yml)
+# 3) Start (fixed ports 5174 / 8001 — old deploy can keep 5173 / 8000)
 chmod +x scripts/deploy.sh
 ./scripts/deploy.sh
 ```
@@ -137,11 +124,11 @@ That script runs `git pull` and `docker compose -f docker-compose.prod.yml up -d
 
 | Service | Old `~/orsa-solvency` | New `~/osra-app` (if both up) |
 |---------|------------------------|-------------------------------|
-| Frontend | 5173 | 5174 (change in compose) |
-| Backend | 8000 | 8001 |
-| Postgres | 5432 | 5433 or share one DB |
+| Frontend | 5173 | **5174** (fixed in prod compose) |
+| Backend | 8000 | **8001** (fixed in prod compose) |
+| Postgres | 5432 (often exposed) | internal only in prod compose |
 
-When you retire the old deploy: `cd ~/orsa-solvency && docker compose down`, then use default ports in `~/osra-app`.
+Open new app: `http://SERVER:5174`. Set `CORS_ORIGINS` in `backend/.env.docker` to match.
 
 ---
 
@@ -151,5 +138,5 @@ When you retire the old deploy: `cd ~/orsa-solvency && docker compose down`, the
 |--------|-----|
 | `git pull` fails auth | PAT or SSH deploy key |
 | `backend/.env.docker` missing | `cp` from `~/orsa-solvency` or `.env.docker.example` |
-| Port already allocated | Set `FRONTEND_PORT` / `BACKEND_PORT` in `~/osra-app/.env` or stop old containers |
+| Port already allocated | Stop old stack or change hardcoded ports in `docker-compose.prod.yml` |
 | API 404 from browser | Prod uses nginx proxy; use `docker-compose.prod.yml`, not dev compose |

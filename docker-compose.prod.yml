@@ -1,10 +1,11 @@
-# Production stack for Linux server (~/osra-app).
-# Usage: docker compose -f docker-compose.prod.yml up -d --build
+# Production stack for Linux server.
+# Fixed ports: frontend 5174, backend 8001 (alongside old deploy on 5173/8000).
+# Works with docker-compose v1 and "docker compose" v2.
 #
-# - Built React app + nginx (not Vite dev server)
-# - Postgres not exposed on the host (internal network only)
-# - restart: unless-stopped
-# - No debug log volume mount
+# Usage: docker-compose -f docker-compose.prod.yml up -d --build
+#    or: docker compose -f docker-compose.prod.yml up -d --build
+
+version: "3.3"
 
 services:
   db:
@@ -13,7 +14,7 @@ services:
     environment:
       POSTGRES_DB: postgres
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-abc123}
+      POSTGRES_PASSWORD: abc123
     volumes:
       - solvency_pg_data:/var/lib/postgresql
     healthcheck:
@@ -29,10 +30,9 @@ services:
     env_file:
       - ./backend/.env.docker
     ports:
-      - "${BACKEND_PORT:-8000}:8000"
+      - "8001:8000"
     depends_on:
-      db:
-        condition: service_healthy
+      - db
 
   frontend:
     build:
@@ -40,8 +40,7 @@ services:
       dockerfile: Dockerfile.prod
     restart: unless-stopped
     ports:
-      # Host 5173 → nginx 80 (keeps same URL habit as dev deploy)
-      - "${FRONTEND_PORT:-5173}:80"
+      - "5174:80"
     depends_on:
       - backend
 
