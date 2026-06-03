@@ -9,7 +9,8 @@ export default defineConfig(({ mode }) => {
   // Prefer real environment variables (e.g. from Docker Compose), then fall back to .env files.
   // Docker Compose: VITE_API_TARGET=http://backend:8000
   // Local dev: VITE_API_TARGET=http://127.0.0.1:8000
-  const apiTarget = (process.env.VITE_API_TARGET || env.VITE_API_TARGET || "http://backend:8000").replace(/\/$/, "");
+  // Default to localhost for `npm run dev` on the host; Docker Compose sets VITE_API_TARGET=http://backend:8000.
+  const apiTarget = (process.env.VITE_API_TARGET || env.VITE_API_TARGET || "http://127.0.0.1:8000").replace(/\/$/, "");
 
   // Keep the default Vite dev port unless explicitly overridden.
   const port = (process.env.VITE_PORT || env.VITE_PORT) ? Number(process.env.VITE_PORT || env.VITE_PORT) : 5173;

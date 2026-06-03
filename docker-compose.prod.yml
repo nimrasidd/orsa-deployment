@@ -1,28 +1,17 @@
 # Production stack for Linux server.
-# Fixed ports: frontend 5174, backend 8001 (alongside old deploy on 5173/8000).
-# Works with docker-compose v1 and "docker compose" v2.
+# Fixed ports: frontend 5174, backend 8001 (alongside dev stack on 5173/8000).
 #
-# Usage: docker-compose -f docker-compose.prod.yml up -d --build
-#    or: docker compose -f docker-compose.prod.yml up -d --build
+# Shares the SAME Postgres as docker-compose.yml (5173):
+# - Keep the 5173 stack running (it owns the `db` service + data volume).
+# - This file does NOT start a second Postgres; backend joins network `osraui_default`.
+#
+# Usage:
+#   docker compose up -d --build                    # 5173 + db (orsa_db)
+#   docker compose -f docker-compose.prod.yml up -d --build   # 5174 + 8001
 
 version: "3.3"
 
 services:
-  db:
-    image: postgres:18-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: postgres
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: abc123
-    volumes:
-      - solvency_pg_data:/var/lib/postgresql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
   backend:
     build:
       context: ./backend
@@ -31,8 +20,8 @@ services:
       - ./backend/.env.docker
     ports:
       - "8001:8000"
-    depends_on:
-      - db
+    networks:
+      - osraui_shared
 
   frontend:
     build:
@@ -43,6 +32,10 @@ services:
       - "5174:80"
     depends_on:
       - backend
+    networks:
+      - osraui_shared
 
-volumes:
-  solvency_pg_data:
+networks:
+  osraui_shared:
+    external: true
+    name: osraui_default
