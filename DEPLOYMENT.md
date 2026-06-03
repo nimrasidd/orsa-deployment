@@ -45,7 +45,7 @@ Same commands as above. GitHub must have your latest code before the server can 
 | File | Use |
 |------|-----|
 | `docker-compose.yml` | **Local dev** — Vite dev server, debug log mount, Postgres on host port 5432 |
-| `docker-compose.prod.yml` | **Linux server** — frontend **5174**, backend **8001**, Postgres password `abc123` |
+| `docker-compose.prod.yml` | **Linux server** — **5174** / **8001** + Postgres (`db`, volume `solvency_pg_data`, not exposed on host) |
 
 `scripts/deploy.sh` uses **`docker-compose.prod.yml`** by default on the server.
 
@@ -94,10 +94,15 @@ cd ~/osra-app
 git remote set-url origin git@github.com:nimrasidd/orsa-deployment.git
 ```
 
-### Database: use old data or fresh DB
+### Database
 
-- **Same data as old deploy:** copy `backend/.env.docker` from `~/orsa-solvency` (same `DATABASE_URL` / password). Run only **one** Postgres container (either old or new compose), or point `DATABASE_URL` at the old `db` host/port.
-- **Fresh DB on new stack:** use new compose Postgres; run SQL from `supabase/all_in_one.sql` in the new database.
+Prod compose starts its own `db` service (volume `solvency_pg_data`). After a one-time `pg_restore`, keep using this stack only.
+
+```env
+DATABASE_URL=postgresql://postgres:abc123@db:5432/orsa_db
+```
+
+Schema seed (if empty DB): `supabase/ORSA_new_init.sql` — not `all_in_one.sql`.
 
 ---
 
@@ -126,7 +131,7 @@ That script runs `git pull` and `docker compose -f docker-compose.prod.yml up -d
 |---------|------------------------|-------------------------------|
 | Frontend | 5173 | **5174** (fixed in prod compose) |
 | Backend | 8000 | **8001** (fixed in prod compose) |
-| Postgres | 5432 (often exposed) | internal only in prod compose |
+| Postgres | 5432 (often exposed) | internal only (`db` in prod compose) |
 
 Open new app: `http://SERVER:5174`. Set `CORS_ORIGINS` in `backend/.env.docker` to match.
 

@@ -1,18 +1,23 @@
-# Production stack for Linux server.
-# Fixed ports: frontend 5174, backend 8001 (alongside dev stack on 5173/8000).
-#
-# Shares the SAME Postgres as ~/orsa-solvency (5173/8000):
-# - Keep the old stack running (it owns `db` + the data volume).
-# - This file does NOT start Postgres; backend joins the old compose network.
-# - Default network: orsa-solvency_default (override: SHARED_DOCKER_NETWORK=my_net)
+# Production stack for Linux server (self-contained: db + backend + frontend).
+# Fixed ports: frontend 5174, backend 8001. Postgres is internal only (no host 5432).
+# Uses volume solvency_pg_data (same name as docker-compose.yml) so migrated data is kept.
 #
 # Usage:
-#   docker compose up -d --build                    # 5173 + db (orsa_db)
-#   docker compose -f docker-compose.prod.yml up -d --build   # 5174 + 8001
+#   docker compose -f docker-compose.prod.yml up -d --build
 
 version: "3.3"
 
 services:
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: orsa_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: abc123
+    volumes:
+      - solvency_pg_data:/var/lib/postgresql
+
   backend:
     build:
       context: ./backend
@@ -21,8 +26,8 @@ services:
       - ./backend/.env.docker
     ports:
       - "8001:8000"
-    networks:
-      - osraui_shared
+    depends_on:
+      - db
 
   frontend:
     build:
@@ -33,10 +38,6 @@ services:
       - "5174:80"
     depends_on:
       - backend
-    networks:
-      - osraui_shared
 
-networks:
-  osraui_shared:
-    external: true
-    name: ${SHARED_DOCKER_NETWORK:-orsa-solvency_default}
+volumes:
+  solvency_pg_data:
