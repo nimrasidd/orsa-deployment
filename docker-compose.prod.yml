@@ -1,9 +1,10 @@
 # Production stack for Linux server.
 # Fixed ports: frontend 5174, backend 8001 (alongside dev stack on 5173/8000).
 #
-# Shares the SAME Postgres as docker-compose.yml (5173):
-# - Keep the 5173 stack running (it owns the `db` service + data volume).
-# - This file does NOT start a second Postgres; backend joins network `osraui_default`.
+# Shares the SAME Postgres as ~/orsa-solvency (5173/8000):
+# - Keep the old stack running (it owns `db` + the data volume).
+# - This file does NOT start Postgres; backend joins the old compose network.
+# - Default network: orsa-solvency_default (override: SHARED_DOCKER_NETWORK=my_net)
 #
 # Usage:
 #   docker compose up -d --build                    # 5173 + db (orsa_db)
@@ -38,4 +39,4 @@ services:
 networks:
   osraui_shared:
     external: true
-    name: osraui_default
+    name: ${SHARED_DOCKER_NETWORK:-orsa-solvency_default}
