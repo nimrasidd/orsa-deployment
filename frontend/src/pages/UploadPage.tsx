@@ -285,7 +285,7 @@ export function UploadPage() {
                 <select
                   value={uploadCompanyId}
                   onChange={(e) => setUploadCompanyId(e.target.value)}
-                  className="h-11 w-full rounded-xl bg-white/5 px-4 text-sm text-slate-100 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-sky-400/60"
+                  className="h-11 w-full rounded-xl bg-white/5 px-4 text-sm text-slate-100 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-brand-400/60"
                 >
                   <option value="">Select company</option>
                   {allCompanies.map((c) => (
@@ -312,7 +312,7 @@ export function UploadPage() {
               <select
                 value={modelId}
                 onChange={(e) => setModelId(e.target.value)}
-                className="h-11 w-full rounded-xl bg-white/5 px-4 text-sm text-slate-100 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-sky-400/60"
+                className="h-11 w-full rounded-xl bg-white/5 px-4 text-sm text-slate-100 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-brand-400/60"
               >
                 <option value="">Select model</option>
                 {companyModels.map((m) => (
@@ -323,7 +323,7 @@ export function UploadPage() {
                 {user?.is_admin ? (
                   <>
                     Add mapping models under{" "}
-                    <Link to="/mappings" className="text-sky-400 hover:text-sky-300">
+                    <Link to="/mappings" className="text-brand-400 hover:text-brand-300">
                       Mappings
                     </Link>{" "}
                     → Models if none are listed.
@@ -342,7 +342,7 @@ export function UploadPage() {
                 value={extractionMode}
                 onChange={(e) => setExtractionMode(e.target.value as "manual" | string)}
                 disabled={!modelId}
-                className="h-11 w-full rounded-xl bg-white/5 px-4 text-sm text-slate-100 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-sky-400/60 disabled:cursor-not-allowed disabled:opacity-50"
+                className="h-11 w-full rounded-xl bg-white/5 px-4 text-sm text-slate-100 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-brand-400/60 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <option value="manual">
                   Manual — file has Code, Description, Value (and sheet/cell columns as needed)
@@ -368,7 +368,7 @@ export function UploadPage() {
                   <select
                     value={reportYear}
                     onChange={(e) => setReportYear(e.target.value ? parseInt(e.target.value, 10) : "")}
-                    className="h-11 w-full rounded-xl bg-white/5 px-4 text-sm text-slate-100 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-sky-400/60"
+                    className="h-11 w-full rounded-xl bg-white/5 px-4 text-sm text-slate-100 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-brand-400/60"
                   >
                     {[0, -1, -2, 1, 2].map((d) => {
                       const y = new Date().getFullYear() + d;
@@ -381,7 +381,7 @@ export function UploadPage() {
                   <select
                     value={reportMonth}
                     onChange={(e) => setReportMonth(e.target.value ? parseInt(e.target.value, 10) : "")}
-                    className="h-11 w-full rounded-xl bg-white/5 px-4 text-sm text-slate-100 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-sky-400/60"
+                    className="h-11 w-full rounded-xl bg-white/5 px-4 text-sm text-slate-100 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-brand-400/60"
                   >
                     {MONTHS.map((m) => (
                       <option key={m.v} value={m.v}>{m.label}</option>
@@ -411,7 +411,7 @@ export function UploadPage() {
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 rows={5}
-                className="w-full rounded-xl bg-white/5 p-4 text-sm text-slate-100 ring-1 ring-white/10 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-400/60"
+                className="w-full rounded-xl bg-white/5 p-4 text-sm text-slate-100 ring-1 ring-white/10 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-400/60"
                 placeholder="What changed in this version?"
               />
             </div>
@@ -423,16 +423,16 @@ export function UploadPage() {
               {...dz.getRootProps()}
               className={cn(
                 "group grid min-h-[220px] cursor-pointer place-items-center rounded-2xl bg-gradient-to-br from-white/5 to-transparent p-6 text-center ring-1 ring-white/10 transition hover:bg-white/[0.06]",
-                dz.isDragActive && "ring-sky-400/40"
+                dz.isDragActive && "ring-brand-400/40"
               )}
             >
               <input {...dz.getInputProps()} />
               <div>
-                <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-sky-500/15 ring-1 ring-sky-400/25">
+                <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-brand-500/15 ring-1 ring-brand-400/25">
                   {file ? (
-                    <FileSpreadsheet className="h-6 w-6 text-sky-200" />
+                    <FileSpreadsheet className="h-6 w-6 text-brand-200" />
                   ) : (
-                    <UploadCloud className="h-6 w-6 text-sky-200" />
+                    <UploadCloud className="h-6 w-6 text-brand-200" />
                   )}
                 </div>
                 <div className="mt-3 text-sm font-medium text-slate-100">
@@ -505,7 +505,7 @@ export function UploadPage() {
                                 <td className="max-w-[120px] truncate py-1.5 pr-2">{it.description ?? "—"}</td>
                                 <td className="py-1.5 pr-2">{it.sheet_name}</td>
                                 <td className="py-1.5 pr-2 font-mono">{it.cell_ref}</td>
-                                <td className="py-1.5 font-mono text-sky-200">{formatValueToSigFigs(it.value) || "—"}</td>
+                                <td className="py-1.5 font-mono text-brand-200">{formatValueToSigFigs(it.value) || "—"}</td>
                               </tr>
                             );
                           })}

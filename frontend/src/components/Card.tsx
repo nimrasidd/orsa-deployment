@@ -11,16 +11,16 @@ export function Card({ className, title, subtitle, actions, children, ...props }
   return (
     <div
       className={cn(
-        "rounded-2xl bg-slate-900/40 p-5 ring-1 ring-white/10 shadow-glow backdrop-blur",
+        "rounded-xl border border-line bg-surface-panel p-4 shadow-sm dark:bg-surface-2/90",
         className
       )}
       {...props}
     >
       {(title || subtitle || actions) && (
-        <div className="mb-4 flex items-start justify-between gap-4">
-          <div>
-            {title && <div className="text-sm font-semibold text-slate-100">{title}</div>}
-            {subtitle && <div className="mt-1 text-xs text-slate-400">{subtitle}</div>}
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-line pb-3">
+          <div className="min-w-0">
+            {title && <div className="font-display text-sm font-semibold text-ink">{title}</div>}
+            {subtitle && <div className="mt-0.5 text-[13px] leading-relaxed text-ink-muted">{subtitle}</div>}
           </div>
           {actions && <div className="shrink-0">{actions}</div>}
         </div>
@@ -29,4 +29,3 @@ export function Card({ className, title, subtitle, actions, children, ...props }
     </div>
   );
 }
-

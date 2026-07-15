@@ -29,6 +29,11 @@ class Settings(BaseSettings):
         description="Comma-separated recipient addresses for access-request notifications.",
     )
 
+    # AI Insights (optional — works without key using rule-based fallback)
+    openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
+    openai_model: str = Field(default="gpt-4o-mini", alias="OPENAI_MODEL")
+    insights_enabled: bool = Field(default=True, alias="INSIGHTS_ENABLED")
+
 
 settings = Settings()
 

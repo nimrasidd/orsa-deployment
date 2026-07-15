@@ -237,7 +237,7 @@ export function ModelsPage() {
                   <select
                     value={compareLeftId ?? ""}
                     onChange={(e) => setCompareLeftId(e.target.value || null)}
-                    className="w-full rounded-lg bg-white/5 px-3 py-2 text-sm text-slate-100 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-sky-400/60"
+                    className="w-full rounded-lg bg-white/5 px-3 py-2 text-sm text-slate-100 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-brand-400/60"
                   >
                     <option value="">Select first upload</option>
                     {compareReports.map((u) => (
@@ -258,7 +258,7 @@ export function ModelsPage() {
                   <select
                     value={compareRightId ?? ""}
                     onChange={(e) => setCompareRightId(e.target.value || null)}
-                    className="w-full rounded-lg bg-white/5 px-3 py-2 text-sm text-slate-100 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-sky-400/60"
+                    className="w-full rounded-lg bg-white/5 px-3 py-2 text-sm text-slate-100 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-brand-400/60"
                   >
                     <option value="">Select second upload</option>
                     {compareReports.map((u) => (
@@ -301,7 +301,7 @@ export function ModelsPage() {
                         <select
                           value={diffFilter}
                           onChange={(e) => setDiffFilter(e.target.value as "all" | "nonzero" | "missing")}
-                          className="h-10 shrink-0 rounded-lg bg-white/5 px-3 text-sm text-slate-100 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-sky-400/60"
+                          className="h-10 shrink-0 rounded-lg bg-white/5 px-3 text-sm text-slate-100 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-brand-400/60"
                         >
                           <option value="all">All rows</option>
                           <option value="nonzero">Non-zero difference</option>
@@ -357,14 +357,14 @@ export function ModelsPage() {
                             const isOpen = compareTableView.expandedForWalk.has(row.code);
                             return (
                               <tr key={row.code} className="border-t border-white/10">
-                                <td className="px-3 py-2 font-mono text-sky-200">
+                                <td className="px-3 py-2 font-mono text-brand-200">
                                   <HierarchyCodeCell
                                     code={row.code}
                                     depth={depth}
                                     hasChildren={hasKids}
                                     isExpanded={isOpen}
                                     onToggle={() => toggleCompareTableRow(row.code)}
-                                    textClassName="font-mono text-sky-200"
+                                    textClassName="font-mono text-brand-200"
                                   />
                                 </td>
                                 <td className="max-w-[12rem] px-3 py-2 text-xs text-slate-400">

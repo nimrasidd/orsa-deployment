@@ -23,6 +23,17 @@ import { Segmented } from "../components/Segmented";
 import { computeHierarchyTableView } from "../lib/hierarchyTable";
 import { CheckCircle2, Download, Eye, FileSpreadsheet, MapPin, Plus, Trash2, UploadCloud, XCircle } from "lucide-react";
 import { cn } from "../lib/cn";
+import {
+  PageHeader,
+  formControlClass,
+  labelClass,
+  tableWrapClass,
+  tableClass,
+  theadClass,
+  thClass,
+  trClass,
+  tdClass,
+} from "../components/ui";
 function formatDate(iso: string) {
   try {
     const d = new Date(iso);
@@ -374,43 +385,41 @@ export function MappingsPage() {
   const selectedModelLabel = selectedModel?.name ?? "";
 
   return (
-    <>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="text-sm font-semibold text-slate-100">Model-based Mapping</div>
-          <div className="mt-1 text-xs text-slate-400">
-            Create a model (name + country), then upload its mapping as an .xlsx workbook (Code → Sheet, Cell Reference).
+    <div className="space-y-4">
+      <PageHeader
+        title="Mappings"
+        subtitle="Create a model (name + country), then upload its mapping workbook (Code → Sheet, Cell)."
+        actions={
+          <div className="flex flex-wrap items-center gap-3">
+            <Segmented
+              value={tab}
+              onChange={(v) => setTab(v as "models" | "list" | "view")}
+              items={[
+                { value: "models", label: "Models" },
+                { value: "list", label: "Mappings" },
+                { value: "view", label: "View" }
+              ]}
+            />
+            {tab === "list" && modelId && (
+              <Button onClick={() => setShowUpload(!showUpload)}>
+                <UploadCloud className="h-4 w-4" /> {showUpload ? "Cancel" : "Upload Mapping"}
+              </Button>
+            )}
           </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <Segmented
-            value={tab}
-            onChange={(v) => setTab(v as "models" | "list" | "view")}
-            items={[
-              { value: "models", label: "Models" },
-              { value: "list", label: "Mappings" },
-              { value: "view", label: "View" }
-            ]}
-          />
-          {tab === "list" && modelId && (
-            <Button onClick={() => setShowUpload(!showUpload)}>
-              <UploadCloud className="h-4 w-4" /> {showUpload ? "Cancel" : "Upload Mapping"}
-            </Button>
-          )}
-        </div>
-      </div>
+        }
+      />
 
       {tab === "models" && (
         <Card
           title="Models"
-          subtitle="Each model is tied to a country. Models are shared: every company can use them. Upload mappings in the Mappings tab."
+          subtitle="Each model is tied to a country. Models are shared across companies."
         >
           <div className="space-y-4">
             <div className="flex flex-wrap items-end gap-3">
               {showCreateModel ? (
                 <>
                   <div>
-                    <div className="mb-1 text-xs text-slate-400">Model name</div>
+                    <label className={labelClass}>Model name</label>
                     <Input
                       placeholder="e.g. OSRA, SCR, Annual Report"
                       value={newModelName}
@@ -419,11 +428,11 @@ export function MappingsPage() {
                     />
                   </div>
                   <div>
-                    <div className="mb-1 text-xs text-slate-400">Country</div>
+                    <label className={labelClass}>Country</label>
                     <select
                       value={newModelCountryId}
                       onChange={(e) => setNewModelCountryId(e.target.value)}
-                      className="h-10 min-w-[12rem] rounded-lg bg-white/5 px-3 text-sm text-slate-100 ring-1 ring-white/10"
+                      className={`min-w-[12rem] ${formControlClass}`}
                     >
                       <option value="">Select country</option>
                       {countries.map((c) => (
@@ -454,44 +463,44 @@ export function MappingsPage() {
                 </Button>
               )}
             </div>
-            <div className="rounded-lg border border-white/10">
-              <div className="border-b border-white/10 px-4 py-2 text-xs font-medium text-slate-400">
+            <div className={tableWrapClass}>
+              <div className="border-b border-line px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-ink-muted">
                 Available mapping models
               </div>
               <div className="max-h-[min(28rem,60vh)] overflow-auto [scrollbar-gutter:stable] [scrollbar-width:thin]">
                 {companyModels.length === 0 ? (
-                  <div className="py-4 text-center text-sm text-slate-500">No models yet. Create one above.</div>
+                  <div className="py-8 text-center text-sm text-ink-muted">No models yet. Create one above.</div>
                 ) : (
-                  <table className="w-full text-left text-sm">
-                    <thead className="sticky top-0 z-[1] bg-slate-950/95 text-xs text-slate-400 backdrop-blur">
-                      <tr className="border-b border-white/10">
-                        <th className="px-4 py-2.5 font-medium">Model name</th>
-                        <th className="px-4 py-2.5 font-medium">Country</th>
-                        <th className="px-4 py-2.5 font-medium">Created</th>
-                        <th className="px-4 py-2.5 font-medium">Created by</th>
-                        <th className="px-4 py-2.5 font-medium text-right">Actions</th>
+                  <table className={tableClass}>
+                    <thead className={theadClass}>
+                      <tr>
+                        <th className={thClass}>Model name</th>
+                        <th className={thClass}>Country</th>
+                        <th className={thClass}>Created</th>
+                        <th className={thClass}>Created by</th>
+                        <th className={`${thClass} text-right`}>Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="text-slate-200">
+                    <tbody>
                       {companyModels.map((m) => (
                         <tr
                           key={m.id}
                           className={cn(
-                            "border-t border-white/10",
-                            modelId === m.id ? "bg-sky-500/10" : "hover:bg-white/[0.03]"
+                            trClass,
+                            modelId === m.id && "bg-brand-700/[0.08] dark:bg-brand-500/10"
                           )}
                         >
-                          <td className="px-4 py-2.5 font-medium text-slate-100">{m.name}</td>
-                          <td className="px-4 py-2.5 text-xs text-slate-400">
+                          <td className={`${tdClass} font-semibold`}>{m.name}</td>
+                          <td className={`${tdClass} text-xs text-ink-muted`}>
                             {m.country_name ?? "—"}
                           </td>
-                          <td className="px-4 py-2.5 text-xs text-slate-400">
+                          <td className={`${tdClass} text-xs text-ink-muted`}>
                             {m.created_at ? formatDate(m.created_at) : "—"}
                           </td>
-                          <td className="max-w-[14rem] truncate px-4 py-2.5 text-xs text-slate-400" title={formatCreatedBy(m)}>
+                          <td className={`max-w-[14rem] truncate ${tdClass} text-xs text-ink-muted`} title={formatCreatedBy(m)}>
                             {formatCreatedBy(m)}
                           </td>
-                          <td className="px-4 py-2.5 text-right">
+                          <td className={`${tdClass} text-right`}>
                             <div className="flex flex-wrap items-center justify-end gap-2">
                               <Button
                                 size="sm"
@@ -507,7 +516,7 @@ export function MappingsPage() {
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  className="text-rose-400 hover:text-rose-300"
+                                  className="text-rose-600 hover:text-rose-500 dark:text-rose-400"
                                   disabled={deletingModelId !== null}
                                   onClick={() => void handleDeleteModel(m)}
                                   title="Delete model and all its mappings"
@@ -538,7 +547,7 @@ export function MappingsPage() {
               <select
                 value={modelId}
                 onChange={(e) => setModelId(e.target.value)}
-                className="h-10 rounded-lg bg-white/5 px-3 text-sm text-slate-100 ring-1 ring-white/10"
+                className={cn(formControlClass, "w-auto min-w-[14rem]")}
               >
                 {companyModels.map((m) => (
                   <option key={m.id} value={m.id}>
@@ -547,11 +556,11 @@ export function MappingsPage() {
                   </option>
                 ))}
               </select>
-              <span className="text-xs text-slate-500">Upload an .xlsx mapping workbook for this model below.</span>
+              <span className="text-xs text-ink-muted">Upload an .xlsx mapping workbook for this model below.</span>
             </div>
           ) : (
-            <p className="text-sm text-slate-400">
-              Go to the <button type="button" onClick={() => setTab("models")} className="text-sky-400 hover:text-sky-300 underline">Models</button> tab to create or select a model.
+            <p className="text-sm text-ink-muted">
+              Go to the <button type="button" onClick={() => setTab("models")} className="font-semibold text-brand-700 underline hover:text-brand-600 dark:text-brand-300">Models</button> tab to create or select a model.
             </p>
           )}
         </Card>
@@ -588,7 +597,7 @@ export function MappingsPage() {
                   <select
                     value={viewMappingId ?? ""}
                     onChange={(e) => setViewMappingId(e.target.value || null)}
-                    className="rounded-lg bg-white/5 px-3 py-2 text-sm text-slate-100 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-sky-400/60"
+                    className={cn(formControlClass, "w-auto min-w-[16rem]")}
                   >
                     {mappings.map((m) => (
                       <option key={m.id} value={m.id}>
@@ -623,26 +632,26 @@ export function MappingsPage() {
           }
         >
           {viewLoading ? (
-            <div className="py-10 text-center text-sm text-slate-400">Loading mapping items…</div>
+            <div className="py-10 text-center text-sm text-ink-muted">Loading mapping items…</div>
           ) : viewItems.length === 0 ? (
-            <div className="py-10 text-center text-sm text-slate-400">
+            <div className="py-10 text-center text-sm text-ink-muted">
               {viewMappingId ? "No items in this mapping." : "Select a mapping to view."}
             </div>
           ) : viewMode === "compare" ? (
             <div className="space-y-4">
-              <div className="text-xs text-slate-500">
+              <div className="text-xs text-ink-muted">
                 Select two mappings to compare side by side. Click nodes to expand/collapse.
               </div>
               {compareLoading ? (
-                <div className="py-10 text-center text-sm text-slate-400">Loading…</div>
+                <div className="py-10 text-center text-sm text-ink-muted">Loading…</div>
               ) : (
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                  <div className="space-y-2 rounded-xl bg-slate-900/30 p-4 ring-1 ring-white/5">
-                    <div className="text-sm font-medium text-slate-300">Left</div>
+                  <div className="space-y-2 rounded-xl border border-line bg-surface-3/40 p-4">
+                    <div className="text-sm font-semibold text-ink">Left</div>
                     <select
                       value={compareLeftId ?? ""}
                       onChange={(e) => setCompareLeftId(e.target.value || null)}
-                      className="w-full rounded-lg bg-white/5 px-3 py-2 text-sm text-slate-100 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-sky-400/60"
+                      className={formControlClass}
                     >
                       <option value="">Select mapping</option>
                       {mappings.map((m) => (
@@ -661,17 +670,17 @@ export function MappingsPage() {
                         }
                       />
                     ) : (
-                      <div className="flex min-h-[200px] items-center justify-center rounded-lg border border-dashed border-white/10 text-sm text-slate-500">
+                      <div className="flex min-h-[200px] items-center justify-center rounded-lg border border-dashed border-line text-sm text-ink-muted">
                         {compareLeftId ? "No items" : "Select a mapping"}
                       </div>
                     )}
                   </div>
-                  <div className="space-y-2 rounded-xl bg-slate-900/30 p-4 ring-1 ring-white/5">
-                    <div className="text-sm font-medium text-slate-300">Right</div>
+                  <div className="space-y-2 rounded-xl border border-line bg-surface-3/40 p-4">
+                    <div className="text-sm font-semibold text-ink">Right</div>
                     <select
                       value={compareRightId ?? ""}
                       onChange={(e) => setCompareRightId(e.target.value || null)}
-                      className="w-full rounded-lg bg-white/5 px-3 py-2 text-sm text-slate-100 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-sky-400/60"
+                      className={formControlClass}
                     >
                       <option value="">Select mapping</option>
                       {mappings.map((m) => (
@@ -690,7 +699,7 @@ export function MappingsPage() {
                         }
                       />
                     ) : (
-                      <div className="flex min-h-[200px] items-center justify-center rounded-lg border border-dashed border-white/10 text-sm text-slate-500">
+                      <div className="flex min-h-[200px] items-center justify-center rounded-lg border border-dashed border-line text-sm text-ink-muted">
                         {compareRightId ? "No items" : "Select a mapping"}
                       </div>
                     )}
@@ -699,8 +708,8 @@ export function MappingsPage() {
               )}
             </div>
           ) : viewMode === "diagram" ? (
-            <div className="rounded-xl bg-slate-900/30 p-4 ring-1 ring-white/5">
-              <div className="mb-3 text-xs text-slate-500">
+            <div className="rounded-xl border border-line bg-surface-3/40 p-4">
+              <div className="mb-3 text-xs text-ink-muted">
                 Click nodes to expand/collapse. Subnodes are also clickable.
               </div>
               <MappingTreeDiagram
@@ -719,37 +728,37 @@ export function MappingsPage() {
                 onExpandAll={() => setMappingViewTableExpanded(new Set(mappingTableView.codesWithChildren))}
                 onCollapseAll={() => setMappingViewTableExpanded(new Set())}
               />
-              <div className="max-h-[min(28rem,60vh)] overflow-auto rounded-lg border border-white/10 [scrollbar-gutter:stable] [scrollbar-width:thin]">
-                <table className="w-full min-w-[40rem] text-left text-sm">
-                  <thead className="sticky top-0 z-[1] bg-slate-950/95 text-xs text-slate-400 backdrop-blur-sm">
-                    <tr className="border-b border-white/10 [&>th]:px-3 [&>th]:pb-3 [&>th]:pt-3 [&>th]:font-medium">
-                      <th>Code</th>
-                      <th>Description</th>
-                      <th>Sheet</th>
-                      <th>Cell Reference</th>
-                      <th>Level</th>
+              <div className={tableWrapClass}>
+                <table className={`${tableClass} min-w-[40rem]`}>
+                  <thead className={theadClass}>
+                    <tr>
+                      <th className={thClass}>Code</th>
+                      <th className={thClass}>Description</th>
+                      <th className={thClass}>Sheet</th>
+                      <th className={thClass}>Cell Reference</th>
+                      <th className={thClass}>Level</th>
                     </tr>
                   </thead>
-                  <tbody className="text-slate-200">
+                  <tbody>
                     {mappingTableView.flat.map(({ row: item, depth }) => {
                       const hasKids = mappingTableView.codesWithChildren.has(item.code);
                       const isOpen = mappingTableView.expandedForWalk.has(item.code);
                       return (
-                        <tr key={item.id} className="border-t border-white/10 [&>td]:py-3">
-                          <td className="pr-4 font-mono text-sky-200">
+                        <tr key={item.id} className={trClass}>
+                          <td className={`${tdClass} font-mono text-brand-800 dark:text-brand-200`}>
                             <HierarchyCodeCell
                               code={item.code}
                               depth={depth}
                               hasChildren={hasKids}
                               isExpanded={isOpen}
                               onToggle={() => toggleMappingTableRow(item.code)}
-                              textClassName="font-mono text-sky-200"
+                              textClassName="font-mono text-brand-800 dark:text-brand-200"
                             />
                           </td>
-                          <td className="pr-4 text-slate-300">{item.description ?? "—"}</td>
-                          <td className="pr-4 text-slate-300">{item.sheet_name}</td>
-                          <td className="pr-4 font-mono text-slate-300">{item.cell_ref}</td>
-                          <td className="pr-4 text-slate-400">{item.level}</td>
+                          <td className={`${tdClass} text-ink-muted`}>{item.description ?? "—"}</td>
+                          <td className={`${tdClass} text-ink-muted`}>{item.sheet_name}</td>
+                          <td className={`${tdClass} font-mono text-ink-muted`}>{item.cell_ref}</td>
+                          <td className={`${tdClass} text-ink-soft`}>{item.level}</td>
                         </tr>
                       );
                     })}
@@ -769,51 +778,51 @@ export function MappingsPage() {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-3">
               <div>
-                <div className="mb-2 text-xs font-medium text-slate-300">Mapping name</div>
+                <div className="mb-2 text-xs font-semibold text-ink">Mapping name</div>
                 <Input
                   placeholder="SCR Mapping v1"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                 />
-                <div className="mt-2 text-xs text-slate-400">
+                <div className="mt-2 text-xs text-ink-muted">
                   Descriptive label for this file; the version number is assigned automatically per model.
                 </div>
               </div>
 
               <div>
-                <div className="mb-2 text-xs font-medium text-slate-300">Notes (optional)</div>
+                <div className="mb-2 text-xs font-semibold text-ink">Notes (optional)</div>
                 <textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   rows={4}
-                  className="w-full rounded-xl bg-white/5 p-4 text-sm text-slate-100 ring-1 ring-white/10 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-400/60"
+                  className="w-full rounded-xl border border-line bg-surface-2 p-4 text-sm text-ink placeholder:text-ink-soft focus:outline-none focus:ring-2 focus:ring-brand-500/25"
                   placeholder="What does this mapping cover?"
                 />
               </div>
             </div>
 
             <div className="space-y-3">
-              <div className="mb-2 text-xs font-medium text-slate-300">Mapping workbook (.xlsx / .xls)</div>
+              <div className="mb-2 text-xs font-semibold text-ink">Mapping workbook (.xlsx / .xls)</div>
               <div
                 {...dz.getRootProps()}
                 className={cn(
-                  "group grid min-h-[200px] cursor-pointer place-items-center rounded-2xl bg-gradient-to-br from-white/5 to-transparent p-6 text-center ring-1 ring-white/10 transition hover:bg-white/[0.06]",
-                  dz.isDragActive && "ring-sky-400/40"
+                  "group grid min-h-[200px] cursor-pointer place-items-center rounded-2xl bg-gradient-to-br from-surface-3 to-transparent p-6 text-center border border-line transition hover:bg-surface-3",
+                  dz.isDragActive && "ring-brand-400/40"
                 )}
               >
                 <input {...dz.getInputProps()} />
                 <div>
-                  <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-sky-500/15 ring-1 ring-sky-400/25">
+                  <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-brand-500/15 ring-1 ring-brand-400/25">
                     {file ? (
-                      <FileSpreadsheet className="h-6 w-6 text-sky-200" />
+                      <FileSpreadsheet className="h-6 w-6 text-brand-700 dark:text-brand-200" />
                     ) : (
-                      <UploadCloud className="h-6 w-6 text-sky-200" />
+                      <UploadCloud className="h-6 w-6 text-brand-700 dark:text-brand-200" />
                     )}
                   </div>
-                  <div className="mt-3 text-sm font-medium text-slate-100">
+                  <div className="mt-3 text-sm font-semibold text-ink">
                     {file ? file.name : "Drop mapping Excel here"}
                   </div>
-                  <div className="mt-1 text-xs text-slate-400">
+                  <div className="mt-1 text-xs text-ink-muted">
                     {file ? "Click to replace" : "or click to browse — .xlsx mapping workbook"}
                   </div>
                 </div>
@@ -839,52 +848,52 @@ export function MappingsPage() {
         }
       >
         {loading ? (
-          <div className="py-10 text-center text-sm text-slate-400">Loading mappings…</div>
+          <div className="py-10 text-center text-sm text-ink-muted">Loading mappings…</div>
         ) : mappings.length === 0 ? (
-          <div className="py-10 text-center text-sm text-slate-400">
+          <div className="py-10 text-center text-sm text-ink-muted">
             No mappings yet. Upload an .xlsx mapping workbook to get started.
           </div>
         ) : (
-          <div className="max-h-[min(28rem,60vh)] overflow-auto rounded-lg border border-white/10 [scrollbar-gutter:stable] [scrollbar-width:thin]">
-            <table className="w-full min-w-[36rem] text-left text-sm">
-              <thead className="sticky top-0 z-[1] bg-slate-950/95 text-xs text-slate-400 backdrop-blur-sm">
-                <tr className="border-b border-white/10 [&>th]:pb-3 [&>th]:pt-3 [&>th]:font-medium">
-                  <th>Name</th>
-                  <th>Version</th>
-                  <th>Status</th>
-                  <th>Items</th>
-                  <th>Uploaded</th>
-                  <th className="text-right">Actions</th>
+          <div className={tableWrapClass}>
+            <table className={tableClass}>
+              <thead className={theadClass}>
+                <tr>
+                  <th className={thClass}>Name</th>
+                  <th className={thClass}>Version</th>
+                  <th className={thClass}>Status</th>
+                  <th className={thClass}>Items</th>
+                  <th className={thClass}>Uploaded</th>
+                  <th className={`${thClass} text-right`}>Actions</th>
                 </tr>
               </thead>
-              <tbody className="text-slate-200">
+              <tbody>
                 {mappings.map((m) => (
-                  <tr key={m.id} className="border-t border-white/10 [&>td]:py-3">
-                    <td className="pr-4">
-                      <div className="font-medium">{m.name}</div>
+                  <tr key={m.id} className={trClass}>
+                    <td className={tdClass}>
+                      <div className="font-semibold">{m.name}</div>
                       {m.notes ? (
-                        <div className="mt-1 text-xs text-slate-400 line-clamp-1">{m.notes}</div>
+                        <div className="mt-1 text-xs text-ink-muted line-clamp-1">{m.notes}</div>
                       ) : null}
                     </td>
-                    <td className="pr-4">
+                    <td className={tdClass}>
                       <Badge>v{m.version}</Badge>
                     </td>
-                    <td className="pr-4">
+                    <td className={tdClass}>
                       {m.is_active ? (
-                        <Badge className="bg-green-500/15 text-green-200 ring-green-400/25">
+                        <Badge className="bg-brand-500/15 text-brand-800 ring-brand-500/25 dark:text-brand-200 dark:ring-brand-400/25">
                           <CheckCircle2 className="mr-1 inline h-3.5 w-3.5" />
                           Active
                         </Badge>
                       ) : (
-                        <Badge className="bg-slate-500/15 text-slate-300 ring-slate-400/25">
+                        <Badge className="bg-surface-3 text-ink-muted">
                           <XCircle className="mr-1 inline h-3.5 w-3.5" />
                           Inactive
                         </Badge>
                       )}
                     </td>
-                    <td className="pr-4 text-slate-300">{m.item_count ?? 0} items</td>
-                    <td className="pr-4 text-slate-300">{formatDate(m.uploaded_at)}</td>
-                    <td className="text-right">
+                    <td className={`${tdClass} text-ink-muted`}>{m.item_count ?? 0} items</td>
+                    <td className={`${tdClass} text-ink-muted`}>{formatDate(m.uploaded_at)}</td>
+                    <td className={`${tdClass} text-right`}>
                       <div className="flex justify-end gap-2">
                         <Button variant="ghost" size="sm" onClick={() => openView(m.id)}>
                           <Eye className="h-4 w-4" /> View
@@ -907,7 +916,7 @@ export function MappingsPage() {
                           variant="ghost"
                           size="sm"
                           onClick={() => handleDelete(m.id)}
-                          className="text-rose-400 hover:text-rose-300"
+                          className="text-rose-600 hover:text-rose-500 dark:text-rose-400"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -921,6 +930,6 @@ export function MappingsPage() {
         )}
       </Card>
       )}
-    </>
+    </div>
   );
 }

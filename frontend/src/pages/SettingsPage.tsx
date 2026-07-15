@@ -15,6 +15,17 @@ import { Button } from "../components/Button";
 import { Card } from "../components/Card";
 import { Input } from "../components/Input";
 import { useAuth } from "../auth/AuthContext";
+import {
+  PageHeader,
+  formControlClass,
+  labelClass,
+  tableWrapClass,
+  tableClass,
+  theadClass,
+  thClass,
+  trClass,
+  tdClass,
+} from "../components/ui";
 
 function formatWhen(iso: string | null) {
   if (!iso) return "—";
@@ -225,34 +236,34 @@ export function SettingsPage() {
     }
   }
 
-  const selectCls =
-    "h-10 rounded-lg bg-white/5 px-3 text-sm text-slate-100 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-sky-400/60";
-
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-lg font-semibold text-slate-100">Settings</h1>
-        <p className="mt-1 text-sm text-slate-400">
-          Manage companies and user accounts. Signed in as <span className="text-slate-300">{user?.email}</span>.
-        </p>
-      </div>
+    <div className="space-y-4">
+      <PageHeader
+        title="Settings"
+        subtitle={
+          <>
+            Manage companies and user accounts. Signed in as{" "}
+            <span className="font-semibold text-ink">{user?.email}</span>.
+          </>
+        }
+      />
 
       {loading ? (
-        <div className="py-16 text-center text-sm text-slate-500">Loading directory…</div>
+        <div className="py-16 text-center text-sm text-ink-muted">Loading directory…</div>
       ) : (
         <>
           <Card
             title="Companies"
-            subtitle="All registered companies. Create a company before assigning new users."
+            subtitle="Register companies first, then assign users to them."
           >
-            <form onSubmit={handleCreateCompany} className="mb-6 flex flex-wrap items-end gap-3 rounded-xl bg-white/[0.03] p-4 ring-1 ring-white/10">
+            <form onSubmit={handleCreateCompany} className="mb-5 flex flex-wrap items-end gap-3 rounded-xl border border-line bg-surface-3/50 p-4">
               <div>
-                <div className="mb-1 text-xs text-slate-400">Company name</div>
+                <label className={labelClass}>Company name</label>
                 <Input value={coName} onChange={(e) => setCoName(e.target.value)} placeholder="e.g. ACME Takaful" className="w-48" />
               </div>
               <div>
-                <div className="mb-1 text-xs text-slate-400">Region</div>
-                <select value={coRegionId} onChange={(e) => setCoRegionId(e.target.value)} className={`min-w-[10rem] ${selectCls}`}>
+                <label className={labelClass}>Region</label>
+                <select value={coRegionId} onChange={(e) => setCoRegionId(e.target.value)} className={`min-w-[10rem] ${formControlClass}`}>
                   <option value="">Select region</option>
                   {regions.map((r) => (
                     <option key={r.id} value={r.id}>{r.name}</option>
@@ -260,12 +271,12 @@ export function SettingsPage() {
                 </select>
               </div>
               <div>
-                <div className="mb-1 text-xs text-slate-400">Country (optional)</div>
+                <label className={labelClass}>Country (optional)</label>
                 <select
                   value={coCountryId}
                   onChange={(e) => setCoCountryId(e.target.value)}
                   disabled={!coRegionId}
-                  className={`min-w-[10rem] ${selectCls} disabled:opacity-40`}
+                  className={`min-w-[10rem] ${formControlClass}`}
                 >
                   <option value="">—</option>
                   {coCountries.map((c) => (
@@ -278,28 +289,28 @@ export function SettingsPage() {
               </Button>
             </form>
 
-            <div className="max-h-[min(22rem,50vh)] overflow-auto rounded-lg border border-white/10 [scrollbar-gutter:stable] [scrollbar-width:thin]">
-              <table className="w-full min-w-[36rem] text-left text-sm">
-                <thead className="sticky top-0 z-[1] bg-slate-950/95 text-xs text-slate-400 backdrop-blur-sm">
-                  <tr className="border-b border-white/10">
-                    <th className="px-4 py-2.5 font-medium">Name</th>
-                    <th className="px-4 py-2.5 font-medium">Region</th>
-                    <th className="px-4 py-2.5 font-medium">Country id</th>
-                    <th className="px-4 py-2.5 font-medium">Actions</th>
-                    <th className="px-4 py-2.5 font-medium font-mono text-xs">ID</th>
+            <div className={`max-h-[min(22rem,50vh)] ${tableWrapClass}`}>
+              <table className={tableClass}>
+                <thead className={theadClass}>
+                  <tr>
+                    <th className={thClass}>Name</th>
+                    <th className={thClass}>Region</th>
+                    <th className={thClass}>Country id</th>
+                    <th className={thClass}>Actions</th>
+                    <th className={`${thClass} font-mono normal-case`}>ID</th>
                   </tr>
                 </thead>
-                <tbody className="text-slate-200">
+                <tbody>
                   {companies.map((c) => (
                     (() => {
                       const assignedCount = users.filter((u) => u.company_id === c.id).length;
                       const canDelete = assignedCount === 0;
                       return (
-                    <tr key={c.id} className="border-t border-white/10">
-                      <td className="px-4 py-2.5 font-medium text-slate-100">{c.name}</td>
-                      <td className="px-4 py-2.5 text-slate-400">{regionName(c.region_id)}</td>
-                      <td className="px-4 py-2.5 font-mono text-xs text-slate-500">{c.country_id ?? "—"}</td>
-                      <td className="px-4 py-2.5">
+                    <tr key={c.id} className={trClass}>
+                      <td className={`${tdClass} font-semibold`}>{c.name}</td>
+                      <td className={`${tdClass} text-ink-muted`}>{regionName(c.region_id)}</td>
+                      <td className={`${tdClass} font-mono text-xs text-ink-soft`}>{c.country_id ?? "—"}</td>
+                      <td className={tdClass}>
                         <Button
                           type="button"
                           variant="ghost"
@@ -315,7 +326,7 @@ export function SettingsPage() {
                           Delete
                         </Button>
                       </td>
-                      <td className="px-4 py-2.5 font-mono text-xs text-slate-500">{c.id}</td>
+                      <td className={`${tdClass} font-mono text-xs text-ink-soft`}>{c.id}</td>
                     </tr>
                       );
                     })()
@@ -325,10 +336,10 @@ export function SettingsPage() {
             </div>
           </Card>
 
-          <Card title="Users" subtitle="Registered accounts. Map a user to a company with the dropdown in each row.">
-            <form onSubmit={handleCreateUser} className="mb-6 flex flex-wrap items-end gap-3 rounded-xl bg-white/[0.03] p-4 ring-1 ring-white/10">
+          <Card title="Users" subtitle="Create accounts and map each user to a company from the row dropdown.">
+            <form onSubmit={handleCreateUser} className="mb-5 flex flex-wrap items-end gap-3 rounded-xl border border-line bg-surface-3/50 p-4">
               <div>
-                <div className="mb-1 text-xs text-slate-400">Email</div>
+                <label className={labelClass}>Email</label>
                 <Input
                   type="email"
                   value={uEmail}
@@ -338,7 +349,7 @@ export function SettingsPage() {
                 />
               </div>
               <div>
-                <div className="mb-1 text-xs text-slate-400">Password</div>
+                <label className={labelClass}>Password</label>
                 <Input
                   type="password"
                   value={uPassword}
@@ -348,12 +359,12 @@ export function SettingsPage() {
                 />
               </div>
               <div>
-                <div className="mb-1 text-xs text-slate-400">Display name</div>
+                <label className={labelClass}>Display name</label>
                 <Input value={uName} onChange={(e) => setUName(e.target.value)} placeholder="Full name" className="w-44" />
               </div>
               <div>
-                <div className="mb-1 text-xs text-slate-400">Company</div>
-                <select value={uCompanyId} onChange={(e) => setUCompanyId(e.target.value)} className={`min-w-[12rem] ${selectCls}`}>
+                <label className={labelClass}>Company</label>
+                <select value={uCompanyId} onChange={(e) => setUCompanyId(e.target.value)} className={`min-w-[12rem] ${formControlClass}`}>
                   <option value="">Select company</option>
                   {companies.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
@@ -365,27 +376,27 @@ export function SettingsPage() {
               </Button>
             </form>
 
-            <div className="max-h-[min(28rem,55vh)] overflow-auto rounded-lg border border-white/10 [scrollbar-gutter:stable] [scrollbar-width:thin]">
-              <table className="w-full min-w-[42rem] text-left text-sm">
-                <thead className="sticky top-0 z-[1] bg-slate-950/95 text-xs text-slate-400 backdrop-blur-sm">
-                  <tr className="border-b border-white/10">
-                    <th className="px-4 py-2.5 font-medium">Name</th>
-                    <th className="px-4 py-2.5 font-medium">Email</th>
-                    <th className="px-4 py-2.5 font-medium">Company</th>
-                    <th className="px-4 py-2.5 font-medium">Map to company</th>
-                    <th className="px-4 py-2.5 font-medium">Actions</th>
-                    <th className="px-4 py-2.5 font-medium">Registered</th>
+            <div className={`max-h-[min(28rem,55vh)] ${tableWrapClass}`}>
+              <table className={`${tableClass} min-w-[42rem]`}>
+                <thead className={theadClass}>
+                  <tr>
+                    <th className={thClass}>Name</th>
+                    <th className={thClass}>Email</th>
+                    <th className={thClass}>Company</th>
+                    <th className={thClass}>Map to company</th>
+                    <th className={thClass}>Actions</th>
+                    <th className={thClass}>Registered</th>
                   </tr>
                 </thead>
-                <tbody className="text-slate-200">
+                <tbody>
                   {users.map((u) => (
-                    <tr key={u.id} className="border-t border-white/10">
-                      <td className="px-4 py-2.5 font-medium text-slate-100">{u.name}</td>
-                      <td className="px-4 py-2.5 text-slate-400">{u.email}</td>
-                      <td className="px-4 py-2.5 text-slate-300">
+                    <tr key={u.id} className={trClass}>
+                      <td className={`${tdClass} font-semibold`}>{u.name}</td>
+                      <td className={`${tdClass} text-ink-muted`}>{u.email}</td>
+                      <td className={tdClass}>
                         {u.company_name ?? u.company_id ?? "—"}
                       </td>
-                      <td className="px-4 py-2.5">
+                      <td className={tdClass}>
                         <select
                           value={u.company_id ?? ""}
                           disabled={mappingUserId === u.id}
@@ -393,7 +404,7 @@ export function SettingsPage() {
                             const next = e.target.value;
                             if (next && next !== (u.company_id ?? "")) void handleCompanyMap(u.id, next);
                           }}
-                          className={`min-w-[11rem] ${selectCls}`}
+                          className={`min-w-[11rem] ${formControlClass}`}
                         >
                           <option value="">Not assigned</option>
                           {u.company_id && !companies.some((c) => c.id === u.company_id) ? (
@@ -404,7 +415,7 @@ export function SettingsPage() {
                           ))}
                         </select>
                       </td>
-                      <td className="px-4 py-2.5">
+                      <td className={tdClass}>
                         <div className="flex flex-wrap gap-2">
                           <Button
                             type="button"
@@ -428,7 +439,7 @@ export function SettingsPage() {
                           </Button>
                         </div>
                       </td>
-                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-slate-500">{formatWhen(u.created_at)}</td>
+                      <td className={`whitespace-nowrap ${tdClass} text-xs text-ink-soft`}>{formatWhen(u.created_at)}</td>
                     </tr>
                   ))}
                 </tbody>

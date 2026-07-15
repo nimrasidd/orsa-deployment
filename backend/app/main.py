@@ -23,6 +23,7 @@ from .db import check_db_connection, get_db
 from .routers import auth, companies, countries, mappings, models, regions, reports, reports_list, uploads
 from .routers.access_requests import router as access_requests_router
 from .routers import settings as settings_router
+from .routers.insights import router as insights_router
 from .schemas import HealthOut
 
 app = FastAPI(title="Solvency Dashboard API")
@@ -235,4 +236,5 @@ app.include_router(countries.router)
 app.include_router(companies.router)
 app.include_router(settings_router.router)
 app.include_router(models.router)
+app.include_router(insights_router)
 

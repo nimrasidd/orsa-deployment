@@ -1,10 +1,13 @@
-import { BarChart3, FileUp, LayoutDashboard, LogOut, MapPin, Settings, Shield } from "lucide-react";
+import { BarChart3, FileUp, LayoutDashboard, LogOut, MapPin, Settings, Sparkles } from "lucide-react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { cn } from "../lib/cn";
 import { useAuth } from "../auth/AuthContext";
+import { BrandLogo } from "./BrandLogo";
+import { ThemeToggle } from "./ThemeToggle";
 
 const navBase = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/", label: "Home", icon: Sparkles },
+  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/reports", label: "Upload", icon: FileUp },
 ];
 const navAdminOnly = [
@@ -16,33 +19,34 @@ export function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   return (
-    <div className="min-h-dvh">
+    <div className="min-h-dvh bg-surface">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -top-48 left-1/2 h-[520px] w-[820px] -translate-x-1/2 rounded-full bg-sky-500/20 blur-3xl" />
-        <div className="absolute -bottom-56 right-[-120px] h-[520px] w-[520px] rounded-full bg-indigo-500/20 blur-3xl" />
+        <div className="absolute -top-40 left-1/3 h-[420px] w-[640px] -translate-x-1/2 rounded-full bg-brand-700/10 blur-3xl dark:bg-brand-500/12" />
+        <div className="absolute -bottom-48 right-[-80px] h-[420px] w-[420px] rounded-full bg-emerald-900/10 blur-3xl dark:bg-emerald-700/10" />
       </div>
 
-      <div className="relative grid min-h-dvh grid-cols-1 lg:grid-cols-[296px_1fr]">
-        <aside className="border-b border-white/10 bg-slate-950/40 p-5 backdrop-blur lg:border-b-0 lg:border-r">
-          <div className="flex items-center gap-3">
-            <div className="grid h-11 w-11 place-items-center rounded-2xl bg-sky-500/20 ring-1 ring-sky-400/30">
-              <Shield className="h-5 w-5 text-sky-300" />
+      <div className="relative grid min-h-dvh grid-cols-1 lg:grid-cols-[240px_1fr]">
+        <aside className="border-b border-line bg-surface-panel/95 p-4 backdrop-blur-xl lg:border-b-0 lg:border-r">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <BrandLogo size="sm" />
+              <div className="mt-2">
+                <div className="font-display text-[13px] font-semibold tracking-wide text-ink">Solvency Dashboard</div>
+                <div className="text-[11px] text-ink-muted">ORSA workspace</div>
+              </div>
             </div>
-            <div>
-              <div className="text-sm font-semibold tracking-wide text-slate-100">Solvency Dashboard</div>
-              <div className="text-xs text-slate-400">Own Risk and Solvency Assessment</div>
-            </div>
+            <ThemeToggle className="shrink-0" />
           </div>
 
-          <div className="mt-6 space-y-2">
+          <div className="mt-5 space-y-1">
             {user && (
-              <div className="mb-2 rounded-xl bg-white/5 px-3 py-2 text-xs">
-                <div className="font-medium text-slate-200">{user.name}</div>
-                <div className="text-slate-500">{user.company_name ?? user.email}</div>
+              <div className="mb-2.5 rounded-xl border border-line bg-surface-3/80 px-3 py-2.5 text-[12px]">
+                <div className="font-semibold text-ink">{user.name}</div>
+                <div className="mt-0.5 truncate text-ink-muted">{user.company_name ?? user.email}</div>
                 <button
                   type="button"
                   onClick={() => { logout(); navigate("/login"); }}
-                  className="mt-2 flex items-center gap-2 text-slate-400 hover:text-slate-200"
+                  className="mt-2 flex items-center gap-1.5 font-medium text-ink-muted transition hover:text-brand-700 dark:hover:text-brand-300"
                 >
                   <LogOut className="h-3.5 w-3.5" /> Sign out
                 </button>
@@ -54,43 +58,41 @@ export function Layout() {
                 <NavLink
                   key={item.to}
                   to={item.to}
+                  end={item.to === "/"}
                   className={({ isActive }) =>
                     cn(
-                      "flex items-center gap-3 rounded-xl px-3 py-2 text-sm ring-1 ring-transparent transition",
+                      "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition",
                       isActive
-                        ? "bg-sky-500/15 text-slate-50 ring-sky-400/25"
-                        : "text-slate-300 hover:bg-white/5 hover:text-slate-100"
+                        ? "bg-brand-700 text-white shadow-sm dark:bg-brand-500 dark:text-slate-950"
+                        : "text-ink-muted hover:bg-surface-3 hover:text-ink"
                     )
                   }
                 >
-                  <Icon className="h-4 w-4" />
+                  <Icon className="h-3.5 w-3.5" />
                   {item.label}
                 </NavLink>
               );
             })}
           </div>
 
-          <div className="mt-8 rounded-2xl bg-white/5 p-4 ring-1 ring-white/10">
-            <div className="flex items-center gap-2 text-xs font-medium text-slate-200">
-              <BarChart3 className="h-4 w-4 text-sky-300" />
+          <div className="mt-6 rounded-xl border border-line bg-surface-3/70 p-3">
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-ink">
+              <BarChart3 className="h-3.5 w-3.5 text-brand-700 dark:text-brand-300" />
               Tip
             </div>
-            <p className="mt-2 text-xs leading-relaxed text-slate-400">
-              Upload the same <span className="text-slate-200">report key</span> again to create a new version.
-              Use <span className="text-slate-200">Latest only</span> on the dashboard to compare versions quickly.
+            <p className="mt-1.5 text-[11px] leading-relaxed text-ink-muted">
+              Upload the same <span className="font-semibold text-ink">report key</span> again to create a new version.
+              Use <span className="font-semibold text-ink">Latest only</span> on the dashboard to compare quickly.
             </p>
           </div>
         </aside>
 
-        <main className="min-w-0 p-5 lg:p-6">
-          <div className="mx-auto max-w-[1400px]">
-            <div className="rounded-2xl bg-slate-900/30 p-4 ring-1 ring-white/10 shadow-glow backdrop-blur">
-              <Outlet />
-            </div>
+        <main className="min-w-0 p-3 lg:p-5">
+          <div className="mx-auto max-w-[1400px] space-y-3">
+            <Outlet />
           </div>
         </main>
       </div>
     </div>
   );
 }
-

@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import { Layout } from "./components/Layout";
 import { Dashboard } from "./pages/Dashboard";
+import { InsightsPage } from "./pages/InsightsPage";
 import { LoginPage } from "./pages/LoginPage";
 import { RequestAccessPage } from "./pages/RequestAccessPage";
 import { ReportsPage } from "./pages/ReportsPage";
@@ -21,7 +22,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   if (loading) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
-        <div className="text-sm text-slate-400">Loading…</div>
+        <div className="text-sm text-ink-muted">Loading…</div>
       </div>
     );
   }
@@ -36,7 +37,7 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   if (loading) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
-        <div className="text-sm text-slate-400">Loading…</div>
+        <div className="text-sm text-ink-muted">Loading…</div>
       </div>
     );
   }
@@ -62,7 +63,8 @@ export function App() {
               </ProtectedRoute>
             }
           >
-            <Route index element={<Dashboard />} />
+            <Route index element={<InsightsPage />} />
+            <Route path="dashboard" element={<Dashboard />} />
             <Route path="reports" element={<ReportsPage />} />
             <Route path="upload" element={<UploadPage />} />
             <Route

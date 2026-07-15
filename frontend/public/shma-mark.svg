@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 80" fill="none">
+  <defs>
+    <linearGradient id="lit" x1="4" y1="4" x2="96" y2="76" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1FA34A"/>
+      <stop offset="40%" stop-color="#0F7A34"/>
+      <stop offset="100%" stop-color="#085028"/>
+    </linearGradient>
+    <linearGradient id="mid" x1="20" y1="12" x2="80" y2="68" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0D6B2E"/>
+      <stop offset="100%" stop-color="#04391A"/>
+    </linearGradient>
+    <linearGradient id="shade" x1="16" y1="16" x2="84" y2="70" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#085028"/>
+      <stop offset="100%" stop-color="#021F10"/>
+    </linearGradient>
+  </defs>
+  <path d="M6 40 L30 8 L54 32 L42 40 L54 48 L30 72 Z" fill="url(#lit)"/>
+  <path d="M30 8 L54 32 L44 40 L34 28 Z" fill="url(#shade)"/>
+  <path d="M30 72 L54 48 L44 40 L34 52 Z" fill="url(#mid)"/>
+  <path d="M40 30 L60 30 L68 40 L60 50 L40 50 L32 40 Z" fill="url(#mid)"/>
+  <path d="M40 30 L60 30 L56 40 L38 40 Z" fill="url(#shade)" opacity="0.85"/>
+  <path d="M46 32 L70 8 L94 40 L70 72 L46 48 L58 40 Z" fill="url(#lit)"/>
+  <path d="M70 8 L94 40 L80 40 L58 32 Z" fill="url(#shade)"/>
+  <path d="M70 72 L94 40 L80 40 L58 48 Z" fill="url(#mid)"/>
+  <path d="M42 34 L56 40 L42 46 L38 40 Z" fill="url(#lit)"/>
+</svg>

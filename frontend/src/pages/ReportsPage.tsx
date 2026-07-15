@@ -142,11 +142,11 @@ export function ReportsPage() {
 
   return (
     <>
-      <div className="rounded-2xl bg-gradient-to-br from-sky-500/15 via-indigo-500/10 to-transparent p-6 ring-1 ring-white/10 shadow-glow backdrop-blur">
+      <div className="rounded-2xl bg-gradient-to-br from-brand-500/12 via-emerald-500/8 to-transparent p-6 ring-1 ring-line shadow-sm backdrop-blur dark:from-brand-500/15 dark:via-emerald-500/10 dark:ring-white/10 dark:shadow-brandGlow">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <div className="text-sm font-semibold text-slate-100">Upload</div>
-            <div className="mt-1 text-xs text-slate-400">
+            <div className="text-sm font-semibold text-ink">Upload</div>
+            <div className="mt-1 text-xs text-ink-muted">
               Browse uploads by filters. One row per report version.
             </div>
           </div>
@@ -165,13 +165,13 @@ export function ReportsPage() {
         <div className="mt-5 space-y-3">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-4">
             <div>
-              <div className="mb-1 text-xs text-slate-400">Company</div>
+              <div className="mb-1 text-xs font-medium text-ink-muted">Company</div>
               <select
                 value={companyId}
                 onChange={(e) => setCompanyId(e.target.value)}
                 disabled={!!user && !user.is_admin}
                 title={user && !user.is_admin ? "Your account is limited to your company" : undefined}
-                className="h-10 w-full rounded-lg bg-white/5 px-3 text-sm text-slate-100 ring-1 ring-white/10 disabled:opacity-70"
+                className="h-10 w-full rounded-lg border border-line bg-surface-panel px-3 text-sm text-ink disabled:opacity-70 dark:bg-surface-2"
               >
                 {user?.is_admin ? <option value="">All</option> : null}
                 {companies.map((co) => (
@@ -180,7 +180,7 @@ export function ReportsPage() {
               </select>
             </div>
             <div>
-              <div className="mb-1 text-xs text-slate-400">Model</div>
+              <div className="mb-1 text-xs font-medium text-ink-muted">Model</div>
               <select
                 value={modelId}
                 onChange={(e) => setModelId(e.target.value)}
@@ -190,7 +190,7 @@ export function ReportsPage() {
                     ? "Select a company first"
                     : "Mapping model (filters uploads by model_id)"
                 }
-                className="h-10 w-full rounded-lg bg-white/5 px-3 text-sm text-slate-100 ring-1 ring-white/10 disabled:opacity-50"
+                className="h-10 w-full rounded-lg border border-line bg-surface-panel px-3 text-sm text-ink disabled:opacity-50 dark:bg-surface-2"
               >
                 <option value="">All</option>
                 {models.map((m) => (
@@ -199,23 +199,23 @@ export function ReportsPage() {
               </select>
             </div>
             <div>
-              <div className="mb-1 text-xs text-slate-400">Year</div>
+              <div className="mb-1 text-xs font-medium text-ink-muted">Year</div>
               <input
                 type="number"
                 placeholder="All"
                 value={reportYear}
                 onChange={(e) => setReportYear(e.target.value ? parseInt(e.target.value, 10) : "")}
-                className="h-10 w-full rounded-lg bg-white/5 px-3 text-sm text-slate-100 ring-1 ring-white/10"
+                className="h-10 w-full rounded-lg border border-line bg-surface-panel px-3 text-sm text-ink dark:bg-surface-2"
                 min={2020}
                 max={2030}
               />
             </div>
             <div>
-              <div className="mb-1 text-xs text-slate-400">Month</div>
+              <div className="mb-1 text-xs font-medium text-ink-muted">Month</div>
               <select
                 value={reportMonth}
                 onChange={(e) => setReportMonth(e.target.value ? parseInt(e.target.value, 10) : "")}
-                className="h-10 w-full rounded-lg bg-white/5 px-3 text-sm text-slate-100 ring-1 ring-white/10"
+                className="h-10 w-full rounded-lg border border-line bg-surface-panel px-3 text-sm text-ink dark:bg-surface-2"
               >
                 <option value="">All</option>
                 {[1,2,3,4,5,6,7,8,9,10,11,12].map((m) => (
@@ -232,13 +232,13 @@ export function ReportsPage() {
               onKeyDown={(e) => { if (e.key === "Enter") void load(); }}
               className="max-w-xs"
             />
-            <label className="flex h-11 items-center justify-between gap-3 rounded-xl bg-white/5 px-4 text-sm ring-1 ring-white/10">
-              <span className="text-slate-300">Latest only</span>
+            <label className="flex h-10 items-center justify-between gap-3 rounded-lg border border-line bg-surface-panel px-4 text-sm dark:bg-surface-2">
+              <span className="text-ink-muted">Latest only</span>
               <input
                 type="checkbox"
                 checked={latestOnly}
                 onChange={(e) => setLatestOnly(e.target.checked)}
-                className="h-4 w-4 accent-sky-400"
+                className="h-4 w-4 accent-brand-600"
               />
             </label>
             <Button variant="ghost" onClick={load} disabled={loading}>
@@ -289,7 +289,7 @@ export function ReportsPage() {
       >
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="text-xs text-slate-400">
+            <thead className="border-b border-line text-xs font-medium text-ink-muted">
               <tr className="[&>th]:pb-3 [&>th]:font-medium">
                 <th>Company</th>
                 <th>Report key</th>
@@ -299,33 +299,33 @@ export function ReportsPage() {
                 <th className="text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="text-slate-200">
+            <tbody>
               {items.map((u) => (
                 <tr
                   key={u.id}
-                  className="border-t border-white/10 [&>td]:py-3"
+                  className="border-t border-line transition hover:bg-surface-2/50 [&>td]:py-3"
                 >
-                  <td className="pr-4 text-slate-300">{getCompanyName(u)}</td>
+                  <td className="pr-4 text-ink">{getCompanyName(u)}</td>
                   <td className="pr-4">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium">{u.report_key}</span>
-                      <Badge className="text-slate-300">id: {u.id.slice(0, 8)}</Badge>
+                      <span className="font-medium text-ink">{u.report_key}</span>
+                      <Badge>id: {u.id.slice(0, 8)}</Badge>
                     </div>
                     {u.notes ? (
-                      <div className="mt-1 text-xs text-slate-400 line-clamp-1">{u.notes}</div>
+                      <div className="mt-1 text-xs text-ink-muted line-clamp-1">{u.notes}</div>
                     ) : null}
                   </td>
                   <td className="pr-4">
                     <Badge>v{u.version_no}</Badge>
                   </td>
-                  <td className="pr-4 text-slate-300">{u.original_filename}</td>
-                  <td className="pr-4 text-slate-300">{formatDate(u.uploaded_at)}</td>
+                  <td className="pr-4 text-ink">{u.original_filename}</td>
+                  <td className="pr-4 text-ink-muted">{formatDate(u.uploaded_at)}</td>
                   <td className="text-right">
                     <div className="flex items-center justify-end gap-0.5">
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-9 w-9 shrink-0 p-0 text-rose-400 hover:bg-rose-500/10 hover:text-rose-300"
+                        className="h-9 w-9 shrink-0 p-0 text-rose-600 hover:bg-rose-500/10 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300"
                         onClick={() => void handleDeleteOne(u)}
                         disabled={loading || deletingId !== null}
                         aria-label={`Delete ${u.report_key} v${u.version_no}`}
@@ -351,26 +351,26 @@ export function ReportsPage() {
               ))}
               {!loading && items.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-400">
+                  <td colSpan={6} className="py-8 text-center text-ink-muted">
                     {loadError ? (
                       <div className="space-y-2">
-                        <p>{loadError}</p>
+                        <p className="text-ink">{loadError}</p>
                         <p className="text-xs">
                           Ensure the backend is running at{" "}
-                          <span className="font-mono text-slate-300">http://127.0.0.1:8000</span>
+                          <span className="font-mono text-ink">http://127.0.0.1:8000</span>
                         </p>
                       </div>
                     ) : (
                       <div className="space-y-2">
                         <p>No results.</p>
                         <p className="text-xs">
-                          Click <strong>Clear filters</strong> above to show all uploads, or{" "}
+                          Click <strong className="text-ink">Clear filters</strong> above to show all uploads, or{" "}
                           <button
                             type="button"
                             onClick={() =>
                               openOrActivate({ path: "/upload", title: "Upload Excel" })
                             }
-                            className="text-sky-400 hover:text-sky-300 underline"
+                            className="font-medium text-brand-700 hover:text-brand-600 underline dark:text-brand-400"
                           >
                             upload a file
                           </button>

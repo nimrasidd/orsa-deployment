@@ -12,6 +12,7 @@ import { RefreshCcw, Sparkles } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { useWorkspace } from "../workspace/tabs";
 import { useAuth } from "../auth/AuthContext";
+import { PageHeader, formControlClass, labelClass, tableWrapClass, tableClass, theadClass, thClass, trClass, tdClass } from "../components/ui";
 import {
   LineChart,
   Line,
@@ -234,7 +235,7 @@ export function Dashboard() {
     }
   }, [loc.pathname, modelId, selectedModelLabel, rename]);
 
-  const CHART_COLORS = ["#38bdf8", "#818cf8", "#34d399", "#fbbf24", "#f472b6", "#a78bfa", "#2dd4bf", "#fb923c"];
+  const CHART_COLORS = ["#16b36a", "#34d399", "#10b981", "#a7f3d0", "#22c55e", "#14b8a6", "#fbbf24", "#fb923c"];
 
   const chartAxisLabel =
     periodGroup === "year" ? "Year" : periodGroup === "quarter" ? "Quarter" : "Month";
@@ -292,40 +293,37 @@ export function Dashboard() {
   }, [chartHierarchyRows, tableCategoryFilter]);
 
   return (
-    <>
-      <div className="rounded-2xl bg-gradient-to-br from-sky-500/15 via-indigo-500/10 to-transparent p-6 ring-1 ring-white/10 shadow-glow backdrop-blur">
-        <div className="flex flex-wrap items-center gap-4">
-          <div>
-            <div className="flex items-center gap-2 text-sm font-semibold text-slate-100">
-              <Sparkles className="h-4 w-4 text-sky-300" />
-              {modelId && selectedModelLabel ? (
-                <>
-                  Uploads dashboard
-                  <span className="font-normal text-sky-200/90">· {selectedModelLabel}</span>
-                </>
-              ) : (
-                "Uploads dashboard"
-              )}
-            </div>
-            <div className="mt-1 text-xs text-slate-400">
-              {modelId && selectedModelLabel
-                ? <>Data scoped to model <span className="font-medium text-slate-300">{selectedModelLabel}</span>. Browse versions by report key and open a report.</>
-                : "Browse versions by report key and open a report."}
-            </div>
-          </div>
-        </div>
+    <div className="space-y-4">
+      <PageHeader
+        title={
+          <span className="inline-flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-brand-700 dark:text-brand-300" />
+            Dashboard
+            {modelId && selectedModelLabel ? (
+              <span className="rounded-full bg-brand-700/10 px-2.5 py-0.5 text-sm font-medium text-brand-800 dark:bg-brand-400/15 dark:text-brand-200">
+                {selectedModelLabel}
+              </span>
+            ) : null}
+          </span>
+        }
+        subtitle={
+          modelId && selectedModelLabel
+            ? `Data scoped to model “${selectedModelLabel}”. Filter by company, period, and report key.`
+            : "Browse report values by period. Start by choosing company and model."
+        }
+      />
 
-        {
-        <div className="mt-5 space-y-3">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-2">
+      <Card title="Filters" subtitle="Narrow the chart and table to the reports you care about.">
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
-              <div className="mb-1 text-xs text-slate-400">Company</div>
+              <label className={labelClass}>Company</label>
               <select
                 value={companyId}
                 onChange={(e) => setCompanyId(e.target.value)}
                 disabled={!!user && !user.is_admin}
                 title={user && !user.is_admin ? "Your account is limited to your company" : undefined}
-                className="h-10 w-full rounded-lg bg-white/5 px-3 text-sm text-slate-100 ring-1 ring-white/10 disabled:opacity-70"
+                className={formControlClass}
               >
                 {user?.is_admin ? <option value="">All</option> : null}
                 {companies.map((co) => (
@@ -334,7 +332,7 @@ export function Dashboard() {
               </select>
             </div>
             <div>
-              <div className="mb-1 text-xs text-slate-400">Model</div>
+              <label className={labelClass}>Model</label>
               <select
                 value={modelId}
                 onChange={(e) => setModelId(e.target.value)}
@@ -344,7 +342,7 @@ export function Dashboard() {
                     ? "Select a company to list mapping models"
                     : "Mapping model (filters chart and scope by model_id)"
                 }
-                className="h-10 w-full rounded-lg bg-white/5 px-3 text-sm text-slate-100 ring-1 ring-white/10 disabled:opacity-50"
+                className={formControlClass}
               >
                 <option value="">All</option>
                 {models.map((m) => (
@@ -361,15 +359,15 @@ export function Dashboard() {
               onKeyDown={(e) => {
                 if (e.key === "Enter") void load();
               }}
-              className="max-w-xs"
+              className="max-w-md"
             />
-            <label className="flex h-11 items-center justify-between gap-3 rounded-xl bg-white/5 px-4 text-sm ring-1 ring-white/10">
-              <span className="text-slate-300">Latest only</span>
+            <label className="flex h-9 items-center justify-between gap-3 rounded-lg border border-line bg-surface-2 px-3 text-[13px] shadow-sm">
+              <span className="font-medium text-ink">Latest only</span>
               <input
                 type="checkbox"
                 checked={latestOnly}
                 onChange={(e) => setLatestOnly(e.target.checked)}
-                className="h-4 w-4 accent-sky-400"
+                className="h-4 w-4 accent-brand-700"
               />
             </label>
             <Button variant="ghost" onClick={load} disabled={loading}>
@@ -395,8 +393,7 @@ export function Dashboard() {
             </Button>
           </div>
         </div>
-        }
-      </div>
+      </Card>
 
       <Card
         title={
@@ -413,18 +410,18 @@ export function Dashboard() {
               )
             : (
                 <>
-                  Line chart: one series per code at <span className="text-slate-300">mapping level 1</span>. Table: <span className="text-slate-300">mapping level 2</span> only. X-axis: Year, Quarter (default), or Month. Optional From / To (year and month).
+                  Line chart: mapping level 1. Table: mapping level 2. Choose Year / Quarter / Month grouping and optional date bounds.
                 </>
               )
         }
         actions={
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-400">Group by</span>
+              <span className="text-xs font-semibold text-ink-muted">Group by</span>
               <select
                 value={periodGroup}
                 onChange={(e) => setPeriodGroup(e.target.value as PeriodGroup)}
-                className="h-9 min-w-[7rem] rounded-lg bg-white/5 px-2 text-xs text-slate-100 ring-1 ring-white/10"
+                className={`${formControlClass} h-9 min-w-[7rem] text-xs`}
                 title="How the chart and table columns are grouped on the time axis"
               >
                 <option value="quarter">Quarter</option>
@@ -433,7 +430,7 @@ export function Dashboard() {
               </select>
             </div>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <span className="text-xs text-slate-400">From</span>
+              <span className="text-xs font-semibold text-ink-muted">From</span>
               <select
                 value={periodFromYear === "" ? "" : String(periodFromYear)}
                 onChange={(e) => {
@@ -441,7 +438,7 @@ export function Dashboard() {
                   setPeriodFromYear(v === "" ? "" : parseInt(v, 10));
                   if (v === "") setPeriodFromMonth("");
                 }}
-                className="h-9 min-w-[5.5rem] rounded-lg bg-white/5 px-2 text-xs text-slate-100 ring-1 ring-white/10"
+                className={`${formControlClass} h-9 min-w-[5.5rem] text-xs`}
                 aria-label="From year"
               >
                 <option value="">Year</option>
@@ -456,7 +453,7 @@ export function Dashboard() {
                   setPeriodFromMonth(v === "" ? "" : parseInt(v, 10));
                 }}
                 disabled={periodFromYear === ""}
-                className="h-9 min-w-[7.5rem] rounded-lg bg-white/5 px-2 text-xs text-slate-100 ring-1 ring-white/10 disabled:opacity-50"
+                className={`${formControlClass} h-9 min-w-[7.5rem] text-xs`}
                 aria-label="From month"
               >
                 <option value="">Month</option>
@@ -466,7 +463,7 @@ export function Dashboard() {
               </select>
             </div>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <span className="text-xs text-slate-400">To</span>
+              <span className="text-xs font-semibold text-ink-muted">To</span>
               <select
                 value={periodToYear === "" ? "" : String(periodToYear)}
                 onChange={(e) => {
@@ -474,7 +471,7 @@ export function Dashboard() {
                   setPeriodToYear(v === "" ? "" : parseInt(v, 10));
                   if (v === "") setPeriodToMonth("");
                 }}
-                className="h-9 min-w-[5.5rem] rounded-lg bg-white/5 px-2 text-xs text-slate-100 ring-1 ring-white/10"
+                className={`${formControlClass} h-9 min-w-[5.5rem] text-xs`}
                 aria-label="To year"
               >
                 <option value="">Year</option>
@@ -489,7 +486,7 @@ export function Dashboard() {
                   setPeriodToMonth(v === "" ? "" : parseInt(v, 10));
                 }}
                 disabled={periodToYear === ""}
-                className="h-9 min-w-[7.5rem] rounded-lg bg-white/5 px-2 text-xs text-slate-100 ring-1 ring-white/10 disabled:opacity-50"
+                className={`${formControlClass} h-9 min-w-[7.5rem] text-xs`}
                 aria-label="To month"
               >
                 <option value="">Month</option>
@@ -500,36 +497,36 @@ export function Dashboard() {
             </div>
             <input
               type="text"
-              placeholder="Node code (e.g. Gross Written)"
+              placeholder="Node code"
               value={nodeCodeFilter}
               onChange={(e) => setNodeCodeFilter(e.target.value)}
-              className="h-9 w-40 rounded-lg bg-white/5 px-3 text-xs text-slate-100 ring-1 ring-white/10 placeholder:text-slate-500"
+              className={`${formControlClass} h-9 w-44 text-xs`}
             />
           </div>
         }
       >
-        <div key={`chart-${periodGroup}-${chartDateFrom}-${chartDateTo}`} className="h-[320px] min-h-[320px] w-full min-w-0">
+        <div key={`chart-${periodGroup}-${chartDateFrom}-${chartDateTo}`} className="h-[320px] min-h-[320px] w-full min-w-0 rounded-xl border border-line bg-surface-2/40 p-2">
           {chartLoading ? (
-            <div className="flex h-full items-center justify-center text-sm text-slate-500">Loading…</div>
+            <div className="flex h-full items-center justify-center text-sm text-ink-muted">Loading…</div>
           ) : hasLineChartSeries && lineChartData.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%" minWidth={0}>
               <LineChart data={lineChartData} margin={{ top: 8, right: 12, left: 8, bottom: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(100,116,139,0.25)" />
                 <XAxis
                   dataKey="xLabel"
-                  stroke="#94a3b8"
+                  stroke="#64748b"
                   fontSize={12}
                   tickLine={false}
                   label={{
                     value: chartAxisLabel,
                     position: "insideBottom",
                     offset: -4,
-                    fill: "#94a3b8",
+                    fill: "#64748b",
                     fontSize: 11
                   }}
                 />
                 <YAxis
-                  stroke="#94a3b8"
+                  stroke="#64748b"
                   fontSize={11}
                   width={68}
                   tickLine={false}
@@ -539,13 +536,13 @@ export function Dashboard() {
                     value: `Amount (${DISPLAY_CURRENCY_CODE})`,
                     angle: -90,
                     position: "insideLeft",
-                    fill: "#94a3b8",
+                    fill: "#64748b",
                     fontSize: 11,
                     style: { textAnchor: "middle" },
                   }}
                 />
                 <Tooltip
-                  contentStyle={{ background: "rgb(15 23 42)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px" }}
+                  contentStyle={{ background: "rgb(var(--surface-panel))", border: "1px solid rgb(var(--line))", borderRadius: "10px", color: "rgb(var(--ink))" }}
                   formatter={(v: number | string | undefined) =>
                     v != null && v !== "" && Number.isFinite(Number(v))
                       ? formatCurrencyValue(Number(v))
@@ -567,7 +564,7 @@ export function Dashboard() {
                     type="monotone"
                     dataKey={row.code}
                     stroke={CHART_COLORS[i % CHART_COLORS.length]}
-                    strokeWidth={2}
+                    strokeWidth={2.5}
                     dot={{ r: 3, strokeWidth: 1 }}
                     connectNulls
                     isAnimationActive={false}
@@ -576,27 +573,27 @@ export function Dashboard() {
               </LineChart>
             </ResponsiveContainer>
           ) : (
-            <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-slate-500">
-              <p>No mapping level 1 values for the selected period or filters.</p>
-              <p className="text-xs">
-                Upload files with <span className="text-slate-300">report date</span> (year/month) set. Ensure Mappings define level 1 codes for the chart and level 2 for the table. Adjust From / To year-month, company, or report key.
+            <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-ink-muted">
+              <p className="font-medium text-ink">No chart data for these filters.</p>
+              <p className="max-w-lg text-center text-xs leading-relaxed">
+                Upload with a report date set, and ensure mappings define level 1 (chart) and level 2 (table) codes.
               </p>
             </div>
           )}
         </div>
 
         {chartTable && chartTable.rows.length > 0 && (
-          <div className="mt-4 space-y-2">
-            <div className="flex flex-wrap items-center gap-3">
-              <p className="text-[11px] leading-snug text-slate-500">
-                Table shows <span className="text-slate-400">mapping level 2</span> only; line chart uses <span className="text-slate-400">mapping level 1</span> (same levels as in Mappings).
+          <div className="mt-5 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-xs leading-snug text-ink-muted">
+                Table shows <span className="font-semibold text-ink">mapping level 2</span>; chart uses <span className="font-semibold text-ink">level 1</span>.
               </p>
               <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-400">Category:</span>
+                <span className="text-xs font-semibold text-ink-muted">Category</span>
                 <select
                   value={tableCategoryFilter}
                   onChange={(e) => setTableCategoryFilter(e.target.value)}
-                  className="h-8 min-w-[220px] rounded-lg bg-white/5 px-3 text-xs text-slate-100 ring-1 ring-white/10"
+                  className={`${formControlClass} h-9 min-w-[220px] text-xs`}
                 >
                   <option value="">All categories</option>
                   {RISK_CATEGORIES.map((c) => (
@@ -605,32 +602,32 @@ export function Dashboard() {
                 </select>
               </div>
             </div>
-            <div className="max-h-[min(28rem,60vh)] overflow-auto rounded-lg border border-white/10 [scrollbar-gutter:stable] [scrollbar-width:thin]">
-              <table className="w-full min-w-[32rem] text-left text-sm">
-                <thead className="sticky top-0 z-[1] bg-slate-950/95 text-xs text-slate-400 backdrop-blur-sm">
-                  <tr className="border-b border-white/10">
-                    <th className="px-4 py-3 font-medium">Name</th>
+            <div className={`max-h-[min(28rem,60vh)] ${tableWrapClass}`}>
+              <table className={`${tableClass} min-w-[32rem]`}>
+                <thead className={theadClass}>
+                  <tr>
+                    <th className={thClass}>Name</th>
                     {tableColumns.map((col) => (
-                      <th key={col} className="px-4 py-3 font-medium text-right">
+                      <th key={col} className={`${thClass} text-right`}>
                         {col}
                       </th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="text-slate-200">
+                <tbody>
                   {levelTwoChartRows.length === 0 ? (
                     <tr>
                       <td
                         colSpan={Math.max(1, tableColumns.length) + 1}
-                        className="border-t border-white/10 px-4 py-8 text-center text-slate-500"
+                        className="border-t border-line px-4 py-8 text-center text-ink-muted"
                       >
                         No rows match the current filters.
                       </td>
                     </tr>
                   ) : (
                     levelTwoChartRows.map((row) => (
-                      <tr key={row.code} className="border-t border-white/10">
-                        <td className="px-4 py-2.5 font-medium text-slate-100">
+                      <tr key={row.code} className={trClass}>
+                        <td className={`${tdClass} font-medium`}>
                           <HierarchyCodeCell
                             code={row.code}
                             displayText={row.name}
@@ -638,13 +635,13 @@ export function Dashboard() {
                             hasChildren={false}
                             isExpanded={false}
                             onToggle={() => {}}
-                            textClassName="font-medium text-slate-100"
+                            textClassName="font-medium text-ink"
                           />
                         </td>
                         {tableColumns.map((col) => {
                           const v = row.values[col] ?? row.values[Number(col) as unknown as keyof typeof row.values];
                           return (
-                            <td key={col} className="px-4 py-2.5 text-right font-mono text-slate-300">
+                            <td key={col} className={`${tdClass} text-right font-mono text-ink-muted`}>
                               {v != null ? formatCurrencyValue(v) : "—"}
                             </td>
                           );
@@ -658,7 +655,7 @@ export function Dashboard() {
           </div>
         )}
       </Card>
-    </>
+    </div>
   );
 }
 

@@ -158,7 +158,7 @@ export function UploadDetail() {
                   {debug != null && (
                     <p className="mt-2 text-xs text-slate-500">Debug: server reports {debug.node_count} row(s).</p>
                   )}
-                  <Link to="/upload" className="mt-4 inline-block text-sky-400 hover:text-sky-300">
+                  <Link to="/upload" className="mt-4 inline-block text-brand-400 hover:text-brand-300">
                     Re-upload file
                   </Link>
                 </div>
@@ -232,7 +232,7 @@ export function UploadDetail() {
                     Debug: server reports {debug.node_count} row(s).
                   </p>
                 )}
-                <Link to="/upload" className="mt-4 inline-block text-sky-400 hover:text-sky-300">
+                <Link to="/upload" className="mt-4 inline-block text-brand-400 hover:text-brand-300">
                   Re-upload file
                 </Link>
               </div>

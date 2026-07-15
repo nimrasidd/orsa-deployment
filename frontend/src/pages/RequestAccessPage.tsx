@@ -60,10 +60,10 @@ export function RequestAccessPage() {
 
   return (
     <PublicPageShell maxWidthClass="max-w-sm">
-      <div className="rounded-2xl bg-slate-900/60 p-8 ring-1 ring-white/10">
+      <div className="glass-panel p-8">
         <OrsaBrandHeader />
-        <h1 className="mb-2 text-sm font-semibold text-slate-200">Request access</h1>
-        <p className="mb-6 text-xs leading-relaxed text-slate-500">
+        <h1 className="mb-2 text-sm font-semibold text-ink">Request access</h1>
+        <p className="mb-6 text-xs leading-relaxed text-ink-muted">
           Tell us who you are and which organization you represent. We will reply to the email you provide.
         </p>
         <form onSubmit={handleSubmit} className="relative space-y-4">
@@ -80,7 +80,7 @@ export function RequestAccessPage() {
             />
           </div>
           <div>
-            <label className="mb-1.5 block text-xs text-slate-400">Name</label>
+            <label className="mb-1.5 block text-xs text-ink-muted">Name</label>
             <Input
               type="text"
               placeholder="Your name"
@@ -91,7 +91,7 @@ export function RequestAccessPage() {
             />
           </div>
           <div>
-            <label className="mb-1.5 block text-xs text-slate-400">Email</label>
+            <label className="mb-1.5 block text-xs text-ink-muted">Email</label>
             <Input
               type="email"
               placeholder="you@company.com"
@@ -102,7 +102,7 @@ export function RequestAccessPage() {
             />
           </div>
           <div>
-            <label className="mb-1.5 block text-xs text-slate-400">Organization</label>
+            <label className="mb-1.5 block text-xs text-ink-muted">Organization</label>
             <Input
               type="text"
               placeholder="Company or team"
@@ -113,22 +113,22 @@ export function RequestAccessPage() {
             />
           </div>
           <div>
-            <label className="mb-1.5 block text-xs text-slate-400">Message (optional)</label>
+            <label className="mb-1.5 block text-xs text-ink-muted">Message (optional)</label>
             <textarea
               placeholder="Anything we should know?"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               rows={4}
-              className="w-full rounded-lg bg-white/5 px-3 py-2 text-sm text-slate-100 ring-1 ring-white/10 placeholder:text-slate-500 focus:outline-none focus:ring-sky-500/50"
+              className="w-full rounded-lg bg-surface-2 px-3 py-2 text-sm text-ink ring-1 ring-line placeholder:text-ink-soft focus:outline-none focus:ring-2 focus:ring-brand-500/50 dark:bg-white/5"
             />
           </div>
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? "Sending…" : "Send request"}
           </Button>
         </form>
-        <p className="mt-6 text-center text-xs text-slate-500">
+        <p className="mt-6 text-center text-xs text-ink-soft">
           Already have an account?{" "}
-          <Link to="/login" className="text-sky-400 hover:text-sky-300">
+          <Link to="/login" className="text-brand-700 hover:text-brand-600 dark:text-brand-400 dark:hover:text-brand-300">
             Sign in
           </Link>
         </p>

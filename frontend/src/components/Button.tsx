@@ -15,18 +15,17 @@ export function Button({
   return (
     <button
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-xl font-medium transition focus:outline-none focus:ring-2 focus:ring-sky-400/60 disabled:opacity-60 disabled:pointer-events-none",
-        size === "sm" ? "h-9 px-3 text-sm" : "h-11 px-4 text-sm",
+        "inline-flex items-center justify-center gap-1.5 rounded-lg font-semibold transition focus:outline-none focus:ring-2 focus:ring-brand-500/40 disabled:pointer-events-none disabled:opacity-55",
+        size === "sm" ? "h-8 px-2.5 text-[12px]" : "h-9 px-3.5 text-[13px]",
         variant === "primary" &&
-          "bg-sky-500 text-slate-950 shadow-[0_10px_30px_rgba(14,165,233,.28)] hover:bg-sky-400",
+          "bg-brand-700 text-white shadow-[0_10px_24px_rgba(8,80,40,0.28)] hover:bg-brand-600 dark:bg-brand-500 dark:text-slate-950 dark:hover:bg-brand-400",
         variant === "ghost" &&
-          "bg-white/5 text-slate-100 ring-1 ring-white/10 hover:bg-white/10 hover:ring-white/15",
+          "border border-line bg-surface-2 text-ink hover:border-brand-500/30 hover:bg-brand-500/10",
         variant === "danger" &&
-          "bg-rose-500 text-slate-950 shadow-[0_10px_30px_rgba(244,63,94,.25)] hover:bg-rose-400",
+          "bg-rose-600 text-white shadow-[0_10px_24px_rgba(225,29,72,0.22)] hover:bg-rose-500",
         className
       )}
       {...props}
     />
   );
 }
-

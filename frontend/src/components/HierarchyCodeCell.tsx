@@ -29,7 +29,7 @@ export function HierarchyCodeCell({
         <button
           type="button"
           onClick={onToggle}
-          className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-white/10 hover:text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-400/60"
+          className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-white/10 hover:text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-400/60"
           aria-expanded={isExpanded}
           aria-label={isExpanded ? `Collapse ${code}` : `Expand ${code}`}
         >

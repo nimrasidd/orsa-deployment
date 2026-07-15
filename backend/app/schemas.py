@@ -102,3 +102,24 @@ class MappingItemOut(BaseModel):
     parent_code: str | None = None
     created_at: datetime
 
+
+class InsightMetric(BaseModel):
+    code: str
+    name: str
+    value: float | None = None
+    change_pct: float | None = None
+    period: str
+
+
+class InsightsSummaryOut(BaseModel):
+    company_name: str | None = None
+    reporting_period: str | None = None
+    headline_metrics: list[InsightMetric] = Field(default_factory=list)
+    top_movers: list[InsightMetric] = Field(default_factory=list)
+    alerts: list[str] = Field(default_factory=list)
+    narrative: str = ""
+    generated_at: str
+    source_upload_id: str | None = None
+    llm_used: bool = False
+    upload_count: int = 0
+
