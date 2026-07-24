@@ -4,7 +4,7 @@ import { cn } from "../lib/cn";
 export const formControlClass =
   "h-9 w-full rounded-lg border border-line bg-surface-2 px-3 text-[13px] text-ink shadow-sm outline-none transition placeholder:text-ink-soft focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/25 disabled:cursor-not-allowed disabled:opacity-55";
 
-export const labelClass = "mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-muted";
+export const labelClass = "mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink";
 
 export const tableWrapClass =
   "overflow-auto rounded-xl border border-line bg-surface-2/60 [scrollbar-gutter:stable] [scrollbar-width:thin]";

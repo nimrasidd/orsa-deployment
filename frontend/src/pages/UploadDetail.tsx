@@ -104,8 +104,8 @@ export function UploadDetail() {
     <>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="text-sm font-semibold text-slate-100">Report</div>
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+          <div className="text-sm font-semibold text-ink">Report</div>
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-muted">
             <Badge>upload: {uploadId?.slice(0, 10)}</Badge>
             <span>Explore hierarchy from your Excel upload.</span>
           </div>
@@ -144,7 +144,7 @@ export function UploadDetail() {
         }
       >
             {loading ? (
-              <div className="py-10 text-center text-sm text-slate-400">Loading…</div>
+              <div className="py-10 text-center text-sm text-ink-muted">Loading…</div>
             ) : view === "diagram" ? (
               roots.length ? (
                 <ReportTreeDiagram
@@ -153,10 +153,10 @@ export function UploadDetail() {
                   onExpandedChange={setExpanded}
                 />
               ) : (
-                <div className="py-10 text-center text-sm text-slate-400">
+                <div className="py-10 text-center text-sm text-ink-muted">
                   <p>No data for diagram view.</p>
                   {debug != null && (
-                    <p className="mt-2 text-xs text-slate-500">Debug: server reports {debug.node_count} row(s).</p>
+                    <p className="mt-2 text-xs text-ink-muted">Debug: server reports {debug.node_count} row(s).</p>
                   )}
                   <Link to="/upload" className="mt-4 inline-block text-brand-400 hover:text-brand-300">
                     Re-upload file
@@ -172,7 +172,7 @@ export function UploadDetail() {
                 />
                 <div className="overflow-auto">
                   <table className="w-full text-left text-sm">
-                    <thead className="text-xs text-slate-400">
+                    <thead className="text-xs text-ink-muted">
                       <tr className="[&>th]:pb-3 [&>th]:font-medium">
                         <th>Code</th>
                         <th>Level</th>
@@ -180,10 +180,10 @@ export function UploadDetail() {
                         <th className="text-right">Value</th>
                       </tr>
                     </thead>
-                    <tbody className="text-slate-200">
+                    <tbody className="text-ink">
                       {filteredTableRows.length === 0 ? (
                         <tr>
-                          <td colSpan={4} className="border-t border-white/10 py-8 text-center text-sm text-slate-500">
+                          <td colSpan={4} className="border-t border-line py-8 text-center text-sm text-ink-muted">
                             No rows match your search.
                           </td>
                         </tr>
@@ -192,7 +192,7 @@ export function UploadDetail() {
                           const hasKids = tableView.codesWithChildren.has(n.code);
                           const isOpen = tableView.expandedForWalk.has(n.code);
                           return (
-                            <tr key={n.id} className="border-t border-white/10 [&>td]:py-2">
+                            <tr key={n.id} className="border-t border-line [&>td]:py-2">
                               <td className="pr-3 font-medium">
                                 <HierarchyCodeCell
                                   code={n.code}
@@ -200,14 +200,14 @@ export function UploadDetail() {
                                   hasChildren={hasKids}
                                   isExpanded={isOpen}
                                   onToggle={() => toggleTableRow(n.code)}
-                                  textClassName="font-medium text-slate-100"
+                                  textClassName="font-medium text-ink"
                                 />
                               </td>
-                              <td className="pr-3 text-slate-300">{n.level}</td>
-                              <td className="hidden pr-3 text-slate-300 md:table-cell">
+                              <td className="pr-3 text-ink">{n.level}</td>
+                              <td className="hidden pr-3 text-ink md:table-cell">
                                 <span className="line-clamp-1">{n.description ?? ""}</span>
                               </td>
-                              <td className="text-right text-slate-100">{formatValueToSigFigs(n.value)}</td>
+                              <td className="text-right text-ink">{formatValueToSigFigs(n.value)}</td>
                             </tr>
                           );
                         })
@@ -215,20 +215,20 @@ export function UploadDetail() {
                     </tbody>
                   </table>
                   {tableView.flat.length > 500 ? (
-                    <div className="mt-3 text-xs text-slate-400">
+                    <div className="mt-3 text-xs text-ink-muted">
                       Showing first 500 visible rows. Use search or collapse sections to narrow results.
                     </div>
                   ) : null}
                 </div>
               </div>
             ) : (
-              <div className="py-10 text-center text-sm text-slate-400">
+              <div className="py-10 text-center text-sm text-ink-muted">
                 <p>No rows for this upload.</p>
                 <p className="mt-2 text-xs">
                   This can happen if the upload failed partway (e.g. numeric overflow) or the database connection fell back to SQLite while you query Supabase.
                 </p>
                 {debug != null && (
-                  <p className="mt-2 text-xs text-slate-500">
+                  <p className="mt-2 text-xs text-ink-muted">
                     Debug: server reports {debug.node_count} row(s).
                   </p>
                 )}

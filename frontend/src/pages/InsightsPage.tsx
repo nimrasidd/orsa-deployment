@@ -14,8 +14,10 @@ import {
 import { useAuth } from "../auth/AuthContext";
 import { getInsightsSummary, type InsightsSummary, type InsightMetric } from "../api/insights";
 import { getChartTable, type ChartTableData } from "../api/reports";
+import { listAllModels, listCompanies, type CompanyOut, type ModelOut } from "../api/regions";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
+import { formControlClass, labelClass } from "../components/ui";
 import { cn } from "../lib/cn";
 import { formatCurrencyValue } from "../lib/format";
 
@@ -31,11 +33,16 @@ type ViewData = {
 
 function buildClientSideInsights(
   chartData: ChartTableData,
-  companyName: string | null
+  companyName: string | null,
+  selectedPeriod?: string | null
 ): ViewData {
   const periods = chartData.periods ?? chartData.years.map(String);
-  const latestPeriod = periods[periods.length - 1] ?? "Latest";
-  const prevPeriod = periods.length >= 2 ? periods[periods.length - 2] : null;
+  const latestPeriod =
+    selectedPeriod && periods.includes(selectedPeriod)
+      ? selectedPeriod
+      : periods[periods.length - 1] ?? "Latest";
+  const latestIdx = periods.indexOf(latestPeriod);
+  const prevPeriod = latestIdx > 0 ? periods[latestIdx - 1] : null;
 
   const headlines: InsightMetric[] = [];
   const movers: InsightMetric[] = [];
@@ -79,14 +86,22 @@ function buildClientSideInsights(
     }
   }
 
-  const improving = headlines.filter(m => (m.change_pct ?? 0) > 0).length;
-  const declining = headlines.filter(m => (m.change_pct ?? 0) < 0).length;
-  const trend = improving > declining ? "an improving trend" : declining > improving ? "areas requiring attention" : "a stable position";
+  const improving = headlines.filter((m) => (m.change_pct ?? 0) > 0).length;
+  const declining = headlines.filter((m) => (m.change_pct ?? 0) < 0).length;
+  const trend =
+    improving > declining
+      ? "an improving trend"
+      : declining > improving
+        ? "areas requiring attention"
+        : "a stable position";
 
   let narrative = `Solvency Overview for ${latestPeriod}: ${companyName || "Your company"} shows ${trend} across ${headlines.length} key capital metrics.\n\nKey Figures:`;
   for (const m of headlines.slice(0, 4)) {
     if (m.value != null) {
-      const valStr = Math.abs(m.value) >= 1000 ? m.value.toLocaleString("en-US", { maximumFractionDigits: 0 }) : m.value.toFixed(2);
+      const valStr =
+        Math.abs(m.value) >= 1000
+          ? m.value.toLocaleString("en-US", { maximumFractionDigits: 0 })
+          : m.value.toFixed(2);
       let changeStr = "";
       if (m.change_pct != null) {
         const dir = m.change_pct > 0 ? "increased" : "decreased";
@@ -101,7 +116,8 @@ function buildClientSideInsights(
       narrative += `\n  - ${a}`;
     }
   }
-  narrative += "\n\nRecommendation: Review flagged metrics and ensure capital buffers remain within risk appetite thresholds.";
+  narrative +=
+    "\n\nRecommendation: Review flagged metrics and ensure capital buffers remain within risk appetite thresholds.";
 
   return {
     company_name: companyName,
@@ -116,62 +132,138 @@ function buildClientSideInsights(
 
 export function InsightsPage() {
   const { user } = useAuth();
-  const [data, setData] = React.useState<ViewData | null>(null);
+  const [chartData, setChartData] = React.useState<ChartTableData | null>(null);
+  const [apiFallback, setApiFallback] = React.useState<ViewData | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  const companyId = user?.is_admin ? undefined : user?.company_id ?? undefined;
-  const companyName = user?.company_name ?? null;
+  const [companies, setCompanies] = React.useState<CompanyOut[]>([]);
+  const [models, setModels] = React.useState<ModelOut[]>([]);
+  const [companyId, setCompanyId] = React.useState("");
+  const [modelId, setModelId] = React.useState("");
+  const [period, setPeriod] = React.useState("");
 
-  const load = React.useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
-    else setLoading(true);
-    setError(null);
+  React.useEffect(() => {
+    listCompanies()
+      .then((c) => setCompanies(Array.isArray(c) ? c : []))
+      .catch(() => setCompanies([]));
+    listAllModels()
+      .then((m) => setModels(Array.isArray(m) ? m : []))
+      .catch(() => setModels([]));
+  }, []);
 
-    try {
-      const result = await getInsightsSummary({ company_id: companyId });
-      if (result && (result.headline_metrics?.length > 0 || result.narrative)) {
-        setData(result);
+  React.useEffect(() => {
+    if (!user) return;
+    if (!user.is_admin && user.company_id) {
+      setCompanyId(user.company_id);
+      return;
+    }
+    setCompanyId((prev) => {
+      if (prev && companies.some((c) => c.id === prev)) return prev;
+      return companies[0]?.id ?? "";
+    });
+  }, [user?.id, user?.is_admin, user?.company_id, companies]);
+
+  const selectedCompanyName =
+    companies.find((c) => c.id === companyId)?.name ??
+    (!user?.is_admin ? user?.company_name ?? null : null);
+
+  const availablePeriods = React.useMemo(
+    () => chartData?.periods ?? chartData?.years?.map(String) ?? [],
+    [chartData]
+  );
+
+  // Keep selected quarter valid when data changes
+  React.useEffect(() => {
+    if (!availablePeriods.length) {
+      setPeriod("");
+      return;
+    }
+    setPeriod((prev) => (prev && availablePeriods.includes(prev) ? prev : availablePeriods[availablePeriods.length - 1]));
+  }, [availablePeriods]);
+
+  const load = React.useCallback(
+    async (isRefresh = false) => {
+      if (!companyId) {
+        setChartData(null);
+        setApiFallback(null);
+        setError("Select a company to view solvency overview for one entity and period.");
         setLoading(false);
         setRefreshing(false);
         return;
       }
-    } catch {
-      // Insights endpoint failed — fall through to chart-table
-    }
 
-    try {
-      const chartData = await getChartTable({
-        company_id: companyId,
-        period_group: "quarter",
-      });
-      if (chartData && chartData.rows.length > 0) {
-        setData(buildClientSideInsights(chartData, companyName));
-      } else {
-        setError("No report data found. The insights will populate once reports are available in the system.");
+      if (isRefresh) setRefreshing(true);
+      else setLoading(true);
+      setError(null);
+
+      try {
+        const nextChart = await getChartTable({
+          company_id: companyId,
+          model_id: modelId || undefined,
+          period_group: "quarter",
+        });
+
+        if (nextChart && nextChart.rows.length > 0) {
+          setChartData(nextChart);
+          setApiFallback(null);
+          setLoading(false);
+          setRefreshing(false);
+          return;
+        }
+
+        setChartData(null);
+        try {
+          const result: InsightsSummary = await getInsightsSummary({
+            company_id: companyId,
+            model_id: modelId || undefined,
+          });
+          if (result && (result.headline_metrics?.length > 0 || result.narrative)) {
+            setApiFallback(result);
+            setLoading(false);
+            setRefreshing(false);
+            return;
+          }
+        } catch {
+          // ignore
+        }
+
+        setApiFallback(null);
+        setError("No report data found for this company. Upload a report first.");
+      } catch {
+        setChartData(null);
+        setApiFallback(null);
+        setError("Unable to load data. Please try refreshing or check your connection.");
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
       }
-    } catch {
-      setError("Unable to load data. Please try refreshing or check your connection.");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [companyId, companyName]);
+    },
+    [companyId, modelId]
+  );
 
-  React.useEffect(() => { void load(); }, [load]);
+  React.useEffect(() => {
+    void load();
+  }, [load]);
+
+  const data = React.useMemo(() => {
+    if (chartData && period) {
+      return buildClientSideInsights(chartData, selectedCompanyName, period);
+    }
+    return apiFallback;
+  }, [chartData, period, selectedCompanyName, apiFallback]);
 
   return (
     <div className="space-y-4">
-      {/* Header */}
       <div className="rounded-xl border border-line bg-gradient-to-br from-brand-600/10 via-surface-panel to-surface-panel p-5 shadow-sm dark:from-brand-500/15 dark:via-surface-panel/80 dark:to-surface-2">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="font-display text-base font-semibold tracking-tight text-ink">
-              {companyName || "Solvency"} Overview
+              {selectedCompanyName || "Solvency"} Overview
             </h1>
             <p className="mt-0.5 text-[13px] text-ink-muted">
-              AI-powered summary of your latest capital and risk position
+              Capital and risk position for one company and one quarter
             </p>
           </div>
           {data?.reporting_period && (
@@ -179,6 +271,57 @@ export function InsightsPage() {
               Period: {data.reporting_period}
             </span>
           )}
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div>
+            <label className={labelClass}>Company</label>
+            <select
+              value={companyId}
+              onChange={(e) => setCompanyId(e.target.value)}
+              disabled={!!user && !user.is_admin}
+              title={user && !user.is_admin ? "Your account is limited to your company" : undefined}
+              className={formControlClass}
+            >
+              {user?.is_admin ? <option value="">Select company</option> : null}
+              {companies.map((co) => (
+                <option key={co.id} value={co.id}>
+                  {co.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className={labelClass}>Model (optional)</label>
+            <select
+              value={modelId}
+              onChange={(e) => setModelId(e.target.value)}
+              className={formControlClass}
+            >
+              <option value="">All models</option>
+              {models.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className={labelClass}>Quarter</label>
+            <select
+              value={period}
+              onChange={(e) => setPeriod(e.target.value)}
+              disabled={!availablePeriods.length}
+              className={formControlClass}
+            >
+              {!availablePeriods.length ? <option value="">No periods yet</option> : null}
+              {availablePeriods.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -191,7 +334,7 @@ export function InsightsPage() {
       ) : error ? (
         <Card>
           <div className="flex flex-col items-center py-6 text-center">
-            <TrendingUp className="h-8 w-8 text-ink-muted/40" />
+            <TrendingUp className="h-8 w-8 text-ink-soft" />
             <p className="mt-3 max-w-md text-[13px] text-ink-muted">{error}</p>
             <Button size="sm" variant="ghost" className="mt-3" onClick={() => void load()}>
               <RefreshCcw className="h-3.5 w-3.5" /> Retry
@@ -200,7 +343,6 @@ export function InsightsPage() {
         </Card>
       ) : data ? (
         <>
-          {/* KPI Cards */}
           {data.headline_metrics.length > 0 && (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {data.headline_metrics.map((m) => (
@@ -209,7 +351,6 @@ export function InsightsPage() {
             </div>
           )}
 
-          {/* AI Narrative */}
           <Card>
             <div className="flex items-start gap-3">
               <div className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-500/15 ring-1 ring-brand-400/20">
@@ -217,12 +358,14 @@ export function InsightsPage() {
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-[13px] font-semibold text-ink">AI Analysis</h3>
+                  <h3 className="text-[13px] font-semibold text-ink">Analysis</h3>
                   {data.llm_used && (
-                    <span className="rounded-full bg-surface-3 px-2 py-0.5 text-[10px] font-medium text-ink-muted">AI-generated</span>
+                    <span className="rounded-full bg-surface-3 px-2 py-0.5 text-[10px] font-medium text-ink-muted">
+                      AI-generated
+                    </span>
                   )}
                 </div>
-                <div className="mt-2 whitespace-pre-line text-[13px] leading-relaxed text-ink-muted">
+                <div className="mt-2 whitespace-pre-line text-[13px] leading-relaxed text-ink">
                   {data.narrative || "No analysis available."}
                 </div>
                 <div className="mt-3 flex items-center gap-3">
@@ -240,7 +383,6 @@ export function InsightsPage() {
             </div>
           </Card>
 
-          {/* Alerts */}
           {data.alerts.length > 0 && (
             <Card>
               <div className="flex items-center gap-2 text-[12px] font-semibold text-ink">
@@ -249,7 +391,7 @@ export function InsightsPage() {
               </div>
               <ul className="mt-2 space-y-1.5">
                 {data.alerts.map((alert, i) => (
-                  <li key={i} className="flex items-start gap-2 text-[12px] text-ink-muted">
+                  <li key={i} className="flex items-start gap-2 text-[12px] text-ink">
                     <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
                     {alert}
                   </li>
@@ -258,9 +400,8 @@ export function InsightsPage() {
             </Card>
           )}
 
-          {/* Top movers */}
           {data.top_movers.length > 0 && (
-            <Card title="Top Movers" subtitle="Largest changes in risk sub-categories">
+            <Card title="Top Movers" subtitle="Largest changes vs prior quarter">
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {data.top_movers.map((m) => (
                   <div
@@ -277,7 +418,6 @@ export function InsightsPage() {
         </>
       ) : null}
 
-      {/* Quick links */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <QuickLink to="/dashboard" icon={LayoutDashboard} label="Dashboard" desc="Charts and detailed data table" />
         <QuickLink to="/reports" icon={FileUp} label="Reports" desc="View and upload reports" />
@@ -296,9 +436,7 @@ function KpiCard({ metric }: { metric: InsightMetric }) {
           <div className="truncate text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
             {metric.name}
           </div>
-          <div className="mt-1 text-lg font-semibold tracking-tight text-ink">
-            {formatted}
-          </div>
+          <div className="mt-1 text-lg font-semibold tracking-tight text-ink">{formatted}</div>
         </div>
         <ChangeBadge pct={metric.change_pct} />
       </div>
@@ -315,8 +453,8 @@ function ChangeBadge({ pct }: { pct: number | null }) {
       className={cn(
         "inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] font-semibold",
         positive
-          ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
-          : "bg-rose-500/15 text-rose-700 dark:text-rose-300"
+          ? "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300"
+          : "bg-rose-500/15 text-rose-800 dark:text-rose-300"
       )}
     >
       <Icon className="h-3 w-3" />

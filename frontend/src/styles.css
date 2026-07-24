@@ -5,14 +5,15 @@
 :root,
 html.light {
   color-scheme: light;
+  /* Stronger contrast — muted/soft were too washed out on pale green surfaces */
   --ink: 15 23 42;
-  --ink-muted: 71 85 105;
-  --ink-soft: 100 116 139;
+  --ink-muted: 51 65 85;
+  --ink-soft: 71 85 105;
   --surface: 236 242 238;
   --surface-2: 248 252 249;
   --surface-3: 226 235 229;
   --surface-panel: 248 252 249;
-  --line: 200 214 205;
+  --line: 180 198 186;
   --page-dot: rgba(6, 78, 40, 0.07);
   --page-glow-a: rgba(8, 80, 40, 0.12);
   --page-glow-b: rgba(6, 60, 32, 0.1);
@@ -20,14 +21,14 @@ html.light {
 
 html.dark {
   color-scheme: dark;
-  --ink: 226 232 240;
-  --ink-muted: 148 163 184;
-  --ink-soft: 100 116 139;
+  --ink: 241 245 249;
+  --ink-muted: 203 213 225;
+  --ink-soft: 148 163 184;
   --surface: 1 4 12;
   --surface-2: 8 14 24;
   --surface-3: 18 28 40;
   --surface-panel: 8 14 24;
-  --line: 30 45 58;
+  --line: 40 55 70;
   --page-dot: rgba(16, 120, 60, 0.07);
   --page-glow-a: rgba(8, 80, 40, 0.2);
   --page-glow-b: rgba(4, 50, 28, 0.16);

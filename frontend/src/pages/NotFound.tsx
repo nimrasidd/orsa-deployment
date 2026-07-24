@@ -13,7 +13,7 @@ export function NotFound() {
         </Link>
       }
     >
-      <div className="text-sm text-slate-300">
+      <div className="text-sm text-ink">
         If you expected a screen here, tell me what flow you want and I’ll add it.
       </div>
     </Card>

@@ -211,25 +211,25 @@ export function ModelsPage() {
       subtitle="Pick two uploads from the same model. Values are joined on code; difference is second file minus first."
       actions={
         compareReports.length >= 2 ? (
-          <span className="text-xs text-slate-500">{compareReports.length} upload(s) available</span>
+          <span className="text-xs text-ink-muted">{compareReports.length} upload(s) available</span>
         ) : null
       }
     >
         <div className="space-y-4">
           {compareReports.length < 2 ? (
-            <div className="py-10 text-center text-sm text-slate-400">
+            <div className="py-10 text-center text-sm text-ink-muted">
               {compareReports.length === 0
                 ? "No uploads found. Create uploads from the Upload page first."
                 : "Need at least 2 uploads to compare."}
             </div>
           ) : compareLoading ? (
-            <div className="py-10 text-center text-sm text-slate-400">Loading…</div>
+            <div className="py-10 text-center text-sm text-ink-muted">Loading…</div>
           ) : (
             <>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="flex flex-col space-y-2 rounded-xl bg-slate-900/30 p-4 ring-1 ring-white/5">
+                <div className="flex flex-col space-y-2 rounded-xl bg-surface-panel/30 p-4 ring-1 ring-white/5">
                   <div
-                    className="shrink-0 text-sm font-medium text-slate-300 truncate"
+                    className="shrink-0 text-sm font-medium text-ink truncate"
                     title={leftUpload ? leftUpload.original_filename : undefined}
                   >
                     {leftFileLabel}
@@ -237,7 +237,7 @@ export function ModelsPage() {
                   <select
                     value={compareLeftId ?? ""}
                     onChange={(e) => setCompareLeftId(e.target.value || null)}
-                    className="w-full rounded-lg bg-white/5 px-3 py-2 text-sm text-slate-100 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-brand-400/60"
+                    className="w-full rounded-lg bg-surface-2 px-3 py-2 text-sm text-ink ring-1 ring-line focus:outline-none focus:ring-2 focus:ring-brand-400/60"
                   >
                     <option value="">Select first upload</option>
                     {compareReports.map((u) => (
@@ -248,9 +248,9 @@ export function ModelsPage() {
                     ))}
                   </select>
                 </div>
-                <div className="flex flex-col space-y-2 rounded-xl bg-slate-900/30 p-4 ring-1 ring-white/5">
+                <div className="flex flex-col space-y-2 rounded-xl bg-surface-panel/30 p-4 ring-1 ring-white/5">
                   <div
-                    className="shrink-0 text-sm font-medium text-slate-300 truncate"
+                    className="shrink-0 text-sm font-medium text-ink truncate"
                     title={rightUpload ? rightUpload.original_filename : undefined}
                   >
                     {rightFileLabel}
@@ -258,7 +258,7 @@ export function ModelsPage() {
                   <select
                     value={compareRightId ?? ""}
                     onChange={(e) => setCompareRightId(e.target.value || null)}
-                    className="w-full rounded-lg bg-white/5 px-3 py-2 text-sm text-slate-100 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-brand-400/60"
+                    className="w-full rounded-lg bg-surface-2 px-3 py-2 text-sm text-ink ring-1 ring-line focus:outline-none focus:ring-2 focus:ring-brand-400/60"
                   >
                     <option value="">Select second upload</option>
                     {compareReports.map((u) => (
@@ -281,12 +281,12 @@ export function ModelsPage() {
               ) : null}
 
               {modelCheck.ok && compareRows.length > 0 ? (
-                <div className="rounded-xl border border-white/10 bg-slate-900/40 p-4">
+                <div className="rounded-xl border border-line bg-surface-panel/40 p-4">
                   <div className="mb-3 flex flex-col gap-3">
                     <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
-                      <div className="text-sm font-medium text-slate-200">
+                      <div className="text-sm font-medium text-ink">
                         Comparison table
-                        <span className="ml-2 font-normal text-xs text-slate-500">
+                        <span className="ml-2 font-normal text-xs text-ink-muted">
                           {compareTableView.flat.length} of {compareRows.length} row
                           {compareRows.length !== 1 ? "s" : ""} visible
                         </span>
@@ -301,7 +301,7 @@ export function ModelsPage() {
                         <select
                           value={diffFilter}
                           onChange={(e) => setDiffFilter(e.target.value as "all" | "nonzero" | "missing")}
-                          className="h-10 shrink-0 rounded-lg bg-white/5 px-3 text-sm text-slate-100 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-brand-400/60"
+                          className="h-10 shrink-0 rounded-lg bg-surface-2 px-3 text-sm text-ink ring-1 ring-line focus:outline-none focus:ring-2 focus:ring-brand-400/60"
                         >
                           <option value="all">All rows</option>
                           <option value="nonzero">Non-zero difference</option>
@@ -315,10 +315,10 @@ export function ModelsPage() {
                       onCollapseAll={() => setCompareTableExpanded(new Set())}
                     />
                   </div>
-                  <div className="max-h-[min(28rem,50vh)] overflow-auto rounded-lg border border-white/10 [scrollbar-gutter:stable]">
+                  <div className="max-h-[min(28rem,50vh)] overflow-auto rounded-lg border border-line [scrollbar-gutter:stable]">
                     <table className="w-full min-w-[42rem] text-left text-sm">
-                      <thead className="sticky top-0 z-[1] bg-slate-950/95 text-xs text-slate-400">
-                        <tr className="border-b border-white/10">
+                      <thead className="sticky top-0 z-[1] bg-surface-panel/95 text-xs text-ink-muted">
+                        <tr className="border-b border-line">
                           <th className="px-3 py-2 font-medium">Code</th>
                           <th className="max-w-[12rem] px-3 py-2 font-medium">Description</th>
                           <th className="max-w-[11rem] px-3 py-2 text-right font-medium" title={leftUpload?.original_filename}>
@@ -326,7 +326,7 @@ export function ModelsPage() {
                               {leftUpload ? truncateFileName(leftUpload.original_filename || leftFileLabel) : leftFileLabel}
                             </span>
                             {leftUpload ? (
-                              <span className="mt-0.5 block font-normal text-[10px] text-slate-500">
+                              <span className="mt-0.5 block font-normal text-[10px] text-ink-muted">
                                 v{leftUpload.version_no} · {leftUpload.report_key}
                               </span>
                             ) : null}
@@ -336,7 +336,7 @@ export function ModelsPage() {
                               {rightUpload ? truncateFileName(rightUpload.original_filename || rightFileLabel) : rightFileLabel}
                             </span>
                             {rightUpload ? (
-                              <span className="mt-0.5 block font-normal text-[10px] text-slate-500">
+                              <span className="mt-0.5 block font-normal text-[10px] text-ink-muted">
                                 v{rightUpload.version_no} · {rightUpload.report_key}
                               </span>
                             ) : null}
@@ -344,10 +344,10 @@ export function ModelsPage() {
                           <th className="px-3 py-2 text-right font-medium">Difference</th>
                         </tr>
                       </thead>
-                      <tbody className="text-slate-200">
+                      <tbody className="text-ink">
                         {filteredCompareRows.length === 0 ? (
                           <tr>
-                            <td colSpan={5} className="border-t border-white/10 px-3 py-12 text-center text-sm text-slate-500">
+                            <td colSpan={5} className="border-t border-line px-3 py-12 text-center text-sm text-ink-muted">
                               No rows match your filters. Clear the search or set the row filter to &quot;All rows&quot;.
                             </td>
                           </tr>
@@ -356,7 +356,7 @@ export function ModelsPage() {
                             const hasKids = codesWithChildren.has(row.code);
                             const isOpen = compareTableView.expandedForWalk.has(row.code);
                             return (
-                              <tr key={row.code} className="border-t border-white/10">
+                              <tr key={row.code} className="border-t border-line">
                                 <td className="px-3 py-2 font-mono text-brand-200">
                                   <HierarchyCodeCell
                                     code={row.code}
@@ -367,21 +367,21 @@ export function ModelsPage() {
                                     textClassName="font-mono text-brand-200"
                                   />
                                 </td>
-                                <td className="max-w-[12rem] px-3 py-2 text-xs text-slate-400">
+                                <td className="max-w-[12rem] px-3 py-2 text-xs text-ink-muted">
                                   <span className="line-clamp-2">{row.description ?? "—"}</span>
                                 </td>
-                                <td className="px-3 py-2 text-right font-mono text-slate-100">
+                                <td className="px-3 py-2 text-right font-mono text-ink">
                                   {row.aVal != null && row.aVal !== "" ? formatValueToSigFigs(row.aVal) : "—"}
                                 </td>
-                                <td className="px-3 py-2 text-right font-mono text-slate-100">
+                                <td className="px-3 py-2 text-right font-mono text-ink">
                                   {row.bVal != null && row.bVal !== "" ? formatValueToSigFigs(row.bVal) : "—"}
                                 </td>
                                 <td
                                   className={`px-3 py-2 text-right font-mono ${
                                     row.diff === null
-                                      ? "text-slate-500"
+                                      ? "text-ink-muted"
                                       : row.diff === 0
-                                        ? "text-slate-400"
+                                        ? "text-ink-muted"
                                         : row.diff > 0
                                           ? "text-emerald-300"
                                           : "text-rose-300"
@@ -396,14 +396,14 @@ export function ModelsPage() {
                       </tbody>
                     </table>
                   </div>
-                  <p className="mt-2 text-[11px] text-slate-500">
+                  <p className="mt-2 text-[11px] text-ink-muted">
                     Difference (second file minus first) when both values are numeric. Rows include codes from either upload.
                   </p>
                 </div>
               ) : null}
 
               {modelCheck.ok && compareLeftId && compareRightId && compareRows.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-white/10 py-8 text-center text-sm text-slate-400">
+                <div className="rounded-lg border border-dashed border-line py-8 text-center text-sm text-ink-muted">
                   No rows to compare (empty node lists).
                 </div>
               ) : null}
@@ -424,10 +424,10 @@ export function ModelsPage() {
 
               {showCompareDiagrams && compareLeftId && compareRightId ? (
                 <>
-                  <div className="text-xs font-medium text-slate-500">Tree diagrams</div>
+                  <div className="text-xs font-medium text-ink-muted">Tree diagrams</div>
                   <div className="grid min-h-[min(400px,50vh)] grid-cols-1 gap-4 lg:grid-cols-2">
-                    <div className="flex min-h-[min(350px,45vh)] flex-col space-y-2 rounded-xl bg-slate-900/30 p-4 ring-1 ring-white/5">
-                      <div className="shrink-0 text-xs text-slate-500 truncate" title={leftUpload?.original_filename}>
+                    <div className="flex min-h-[min(350px,45vh)] flex-col space-y-2 rounded-xl bg-surface-panel/30 p-4 ring-1 ring-white/5">
+                      <div className="shrink-0 text-xs text-ink-muted truncate" title={leftUpload?.original_filename}>
                         {leftFileLabel}
                       </div>
                       {compareLeftTree.length > 0 ? (
@@ -444,13 +444,13 @@ export function ModelsPage() {
                           />
                         </div>
                       ) : (
-                        <div className="flex min-h-[200px] items-center justify-center rounded-lg border border-dashed border-white/10 text-sm text-slate-500">
+                        <div className="flex min-h-[200px] items-center justify-center rounded-lg border border-dashed border-line text-sm text-ink-muted">
                           {compareLeftId ? "No tree data for this upload" : "Select first upload"}
                         </div>
                       )}
                     </div>
-                    <div className="flex min-h-[min(350px,45vh)] flex-col space-y-2 rounded-xl bg-slate-900/30 p-4 ring-1 ring-white/5">
-                      <div className="shrink-0 text-xs text-slate-500 truncate" title={rightUpload?.original_filename}>
+                    <div className="flex min-h-[min(350px,45vh)] flex-col space-y-2 rounded-xl bg-surface-panel/30 p-4 ring-1 ring-white/5">
+                      <div className="shrink-0 text-xs text-ink-muted truncate" title={rightUpload?.original_filename}>
                         {rightFileLabel}
                       </div>
                       {compareRightTree.length > 0 ? (
@@ -467,7 +467,7 @@ export function ModelsPage() {
                           />
                         </div>
                       ) : (
-                        <div className="flex min-h-[200px] items-center justify-center rounded-lg border border-dashed border-white/10 text-sm text-slate-500">
+                        <div className="flex min-h-[200px] items-center justify-center rounded-lg border border-dashed border-line text-sm text-ink-muted">
                           {compareRightId ? "No tree data for this upload" : "Select second upload"}
                         </div>
                       )}

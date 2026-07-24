@@ -15,7 +15,7 @@ export function CompareDetailPage() {
 
   if (!leftId || !rightId) {
     return (
-      <div className="py-10 text-center text-sm text-slate-400">
+      <div className="py-10 text-center text-sm text-ink-muted">
         <p>Missing report IDs. Go to Compare reports and select two reports, then click &quot;Open side by side&quot;.</p>
         <Button
           variant="ghost"
@@ -33,8 +33,8 @@ export function CompareDetailPage() {
     <>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="text-sm font-semibold text-slate-100">Compare side by side</div>
-          <div className="mt-1 text-xs text-slate-400">
+          <div className="text-sm font-semibold text-ink">Compare side by side</div>
+          <div className="mt-1 text-xs text-ink-muted">
             Left and right reports displayed in split view. Switch between Table and Diagram per panel.
           </div>
         </div>

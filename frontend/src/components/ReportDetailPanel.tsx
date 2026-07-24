@@ -98,14 +98,14 @@ export function ReportDetailPanel({ uploadId, title, compact }: Props) {
   const tableFlatLimited = React.useMemo(() => tableView.flat.slice(0, 300), [tableView.flat]);
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-xl bg-slate-900/50 ring-1 ring-white/5">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 px-4 py-2">
-        <span className="truncate text-sm font-medium text-slate-200">{title}</span>
+    <div className="flex h-full flex-col overflow-hidden rounded-xl bg-surface-panel/50 ring-1 ring-white/5">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-4 py-2">
+        <span className="truncate text-sm font-medium text-ink">{title}</span>
         <div className="flex items-center gap-2">
           <select
             value={view}
             onChange={(e) => setView(e.target.value as "table" | "diagram")}
-            className="h-8 rounded-lg bg-white/5 px-2 text-xs text-slate-100 ring-1 ring-white/10"
+            className="h-8 rounded-lg bg-surface-2 px-2 text-xs text-ink ring-1 ring-line"
           >
             <option value="table">Table</option>
             <option value="diagram">Diagram</option>
@@ -122,14 +122,14 @@ export function ReportDetailPanel({ uploadId, title, compact }: Props) {
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-3">
         {loading ? (
-          <div className="flex h-32 items-center justify-center text-sm text-slate-500">Loading…</div>
+          <div className="flex h-32 items-center justify-center text-sm text-ink-muted">Loading…</div>
         ) : view === "diagram" ? (
           roots.length ? (
             <div className="flex min-h-0 flex-1 flex-col overflow-auto">
               <ReportTreeDiagram roots={roots} expanded={expanded} onExpandedChange={setExpanded} />
             </div>
           ) : (
-            <div className="py-8 text-center text-sm text-slate-500">
+            <div className="py-8 text-center text-sm text-ink-muted">
               No hierarchy to diagram. {debug != null && `Debug: ${debug.node_count} row(s).`}
             </div>
           )
@@ -142,7 +142,7 @@ export function ReportDetailPanel({ uploadId, title, compact }: Props) {
             />
             <div className="min-h-0 flex-1 overflow-auto">
               <table className="w-full text-left text-xs">
-                <thead className="text-slate-400">
+                <thead className="text-ink-muted">
                   <tr>
                     <th className="pb-2 pr-2">Code</th>
                     <th className="pb-2 pr-2">Level</th>
@@ -150,10 +150,10 @@ export function ReportDetailPanel({ uploadId, title, compact }: Props) {
                     <th className="pb-2 text-right">Value</th>
                   </tr>
                 </thead>
-                <tbody className="text-slate-200">
+                <tbody className="text-ink">
                   {filteredTableRows.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="border-t border-white/5 py-6 text-center text-slate-500">
+                      <td colSpan={4} className="border-t border-line py-6 text-center text-ink-muted">
                         No rows match your search.
                       </td>
                     </tr>
@@ -162,7 +162,7 @@ export function ReportDetailPanel({ uploadId, title, compact }: Props) {
                       const hasKids = tableView.codesWithChildren.has(n.code);
                       const isOpen = tableView.expandedForWalk.has(n.code);
                       return (
-                        <tr key={n.id} className="border-t border-white/5">
+                        <tr key={n.id} className="border-t border-line">
                           <td className="py-1.5 pr-2 font-medium">
                             <HierarchyCodeCell
                               code={n.code}
@@ -170,14 +170,14 @@ export function ReportDetailPanel({ uploadId, title, compact }: Props) {
                               hasChildren={hasKids}
                               isExpanded={isOpen}
                               onToggle={() => toggleTableRow(n.code)}
-                              textClassName="font-medium text-slate-100"
+                              textClassName="font-medium text-ink"
                             />
                           </td>
                           <td className="py-1.5 pr-2">{n.level}</td>
                           <td className="hidden max-w-[120px] truncate py-1.5 pr-2 md:table-cell">
                             {n.description ?? ""}
                           </td>
-                          <td className="py-1.5 text-right text-slate-100">{formatValueToSigFigs(n.value)}</td>
+                          <td className="py-1.5 text-right text-ink">{formatValueToSigFigs(n.value)}</td>
                         </tr>
                       );
                     })
@@ -185,12 +185,12 @@ export function ReportDetailPanel({ uploadId, title, compact }: Props) {
                 </tbody>
               </table>
               {tableView.flat.length > 300 ? (
-                <div className="mt-2 text-xs text-slate-500">Showing first 300 visible rows. Use search or collapse.</div>
+                <div className="mt-2 text-xs text-ink-muted">Showing first 300 visible rows. Use search or collapse.</div>
               ) : null}
             </div>
           </div>
         ) : (
-          <div className="py-8 text-center text-sm text-slate-500">No rows to show.</div>
+          <div className="py-8 text-center text-sm text-ink-muted">No rows to show.</div>
         )}
       </div>
     </div>

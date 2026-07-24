@@ -127,8 +127,8 @@ export function ReportTreeDiagram({ roots, expanded: controlledExpanded, onExpan
   }, [roots, expanded]);
 
   return (
-    <div className="flex h-full min-h-[min(250px,35vh)] w-full flex-col overflow-auto rounded-lg border border-white/10 bg-slate-900/60 p-4">
-      <div className="mb-2 shrink-0 text-xs text-slate-500">
+    <div className="flex h-full min-h-[min(250px,35vh)] w-full flex-col overflow-auto rounded-lg border border-line bg-surface-panel/60 p-4">
+      <div className="mb-2 shrink-0 text-xs text-ink-muted">
         Click expandable nodes to expand/collapse inline. Left and right can expand independently. Leaf nodes are clickable.
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
