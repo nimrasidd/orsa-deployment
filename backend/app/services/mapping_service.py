@@ -11,7 +11,13 @@ from uuid import uuid4
 import sqlite3
 
 from ..services.excel_import import _norm_code, _norm_header, derive_hierarchy
-from ..services.excel_loader import get_cell_value, load_excel_sheets
+from ..services.excel_loader import (
+    close_workbooks,
+    get_cell_value,
+    load_excel_sheets,
+    open_workbooks_for_extraction,
+    read_mapped_cell,
+)
 
 
 MAPPING_REQUIRED_HEADERS = {"code", "description", "sheet", "cell reference"}
@@ -124,69 +130,145 @@ def _normalize_sheet_key(name: str) -> str:
     return s
 
 
+def coerce_excel_numeric(raw: Any, number_format: str | None = None) -> Decimal | None:
+    """
+    Convert Excel cell content to Decimal for storage.
+
+    Handles:
+    - Percentage number formats (Excel stores 1.452 for display 145.2%) → store 145.2
+    - Text like '145.2%' or '145.2 %' → 145.2
+    - Plain numbers and comma-grouped strings
+    """
+    if raw is None or raw == "":
+        return None
+
+    fmt = (number_format or "").lower()
+    is_pct_format = "%" in fmt
+
+    if isinstance(raw, Decimal):
+        val = raw
+        from_pct_text = False
+    elif isinstance(raw, bool):
+        return None
+    elif isinstance(raw, (int, float)):
+        val = Decimal(str(raw))
+        from_pct_text = False
+    else:
+        s = str(raw).strip().replace("\u00a0", " ").replace(",", "")
+        # Strip common ratio suffixes / noise
+        s = re.sub(r"\s+", "", s)
+        from_pct_text = s.endswith("%")
+        if from_pct_text:
+            s = s[:-1]
+        if not s:
+            return None
+        try:
+            val = Decimal(s)
+        except (InvalidOperation, ValueError):
+            return None
+
+    # Excel % format uses fractional storage (0.1452 or 1.452 for 145.2%).
+    # Convert to the on-screen percentage number users expect.
+    if is_pct_format and not from_pct_text:
+        val = val * Decimal("100")
+
+    return val
+
+
 def extract_values_from_file(xlsx_bytes: bytes, mapping_items: list[MappingItem]) -> dict[str, Decimal | None]:
     """
     Extract values from an uploaded Excel file (xlsx or xls) based on mapping items.
 
     Returns: dict mapping code -> extracted value (or None if not found/invalid)
+
+    Prefer openpyxl cell reads (cached values + % number formats + simple formula refs).
+    Fall back to the grid loader for .xls / unreadable zip workbooks.
     """
     logger = logging.getLogger(__name__)
-
-    sheets = load_excel_sheets(xlsx_bytes)
     results: dict[str, Decimal | None] = {}
 
-    # Build sheet lookup with multiple keys for flexible matching
-    sheet_map: dict[str, list[list[Any]]] = {}
-    for name, rows in sheets:
-        key = _normalize_sheet_key(name)
-        sheet_map[key] = rows
-        base_name = name.split("(")[0].strip().lower()
-        if base_name:
-            sheet_map[_normalize_sheet_key(base_name)] = rows
-        # Also store without spaces for "Sheet1" vs "Sheet 1"
-        sheet_map[key.replace(" ", "")] = rows
+    wb_values, wb_formulas = open_workbooks_for_extraction(xlsx_bytes)
+    used_openpyxl = wb_values is not None
 
-    for item in mapping_items:
-        lookup_key = _normalize_sheet_key(item.sheet_name)
-        rows = sheet_map.get(lookup_key)
-        if not rows:
-            base = item.sheet_name.split("(")[0].strip().lower()
-            rows = sheet_map.get(_normalize_sheet_key(base))
-        if not rows:
-            rows = sheet_map.get(lookup_key.replace(" ", ""))
+    try:
+        if used_openpyxl:
+            for item in mapping_items:
+                try:
+                    raw_value, number_format = read_mapped_cell(
+                        wb_values,
+                        wb_formulas,
+                        item.sheet_name,
+                        str(item.cell_ref).strip(),
+                    )
+                    results[item.code] = coerce_excel_numeric(raw_value, number_format)
+                    if results[item.code] is None:
+                        logger.debug(
+                            "Null/empty value for code %s at %s!%s",
+                            item.code,
+                            item.sheet_name,
+                            item.cell_ref,
+                        )
+                except Exception as e:
+                    logger.debug(
+                        "Error extracting %s at %s!%s: %s",
+                        item.code,
+                        item.sheet_name,
+                        item.cell_ref,
+                        e,
+                    )
+                    results[item.code] = None
+            return results
 
-        if not rows:
-            logger.debug("Sheet not found for code %s: mapping sheet=%r, available=%s",
-                        item.code, item.sheet_name, list(sheet_map.keys()))
-            results[item.code] = None
-            continue
+        # Fallback: full grid load (xlrd / older paths)
+        sheets = load_excel_sheets(xlsx_bytes)
+        sheet_map: dict[str, list[list[Any]]] = {}
+        for name, rows in sheets:
+            key = _normalize_sheet_key(name)
+            sheet_map[key] = rows
+            base_name = name.split("(")[0].strip().lower()
+            if base_name:
+                sheet_map[_normalize_sheet_key(base_name)] = rows
+            sheet_map[key.replace(" ", "")] = rows
+            sheet_map[key.replace("-", "").replace(" ", "")] = rows
 
-        try:
-            cell_ref = str(item.cell_ref).strip()
-            raw_value = get_cell_value(rows, cell_ref)
+        for item in mapping_items:
+            lookup_key = _normalize_sheet_key(item.sheet_name)
+            rows = sheet_map.get(lookup_key)
+            if not rows:
+                base = item.sheet_name.split("(")[0].strip().lower()
+                rows = sheet_map.get(_normalize_sheet_key(base))
+            if not rows:
+                rows = sheet_map.get(lookup_key.replace(" ", ""))
+            if not rows:
+                rows = sheet_map.get(lookup_key.replace("-", "").replace(" ", ""))
 
-            if raw_value is None or raw_value == "":
-                logger.debug("Null/empty value for code %s at %s!%s (sheet has %d rows)",
-                             item.code, item.sheet_name, cell_ref, len(rows))
+            if not rows:
+                logger.debug(
+                    "Sheet not found for code %s: mapping sheet=%r, available=%s",
+                    item.code,
+                    item.sheet_name,
+                    list(sheet_map.keys()),
+                )
                 results[item.code] = None
                 continue
 
-            # Convert to Decimal
-            if isinstance(raw_value, Decimal):
-                results[item.code] = raw_value
-            elif isinstance(raw_value, (int, float)):
-                results[item.code] = Decimal(str(raw_value))
-            else:
-                try:
-                    cleaned = str(raw_value).replace(",", "").strip()
-                    results[item.code] = Decimal(cleaned) if cleaned else None
-                except (InvalidOperation, ValueError):
-                    results[item.code] = None
-        except Exception as e:
-            logger.debug("Error extracting %s at %s!%s: %s", item.code, item.sheet_name, item.cell_ref, e)
-            results[item.code] = None
+            try:
+                cell_ref = str(item.cell_ref).strip()
+                raw_value = get_cell_value(rows, cell_ref)
+                results[item.code] = coerce_excel_numeric(raw_value, None)
+            except Exception as e:
+                logger.debug(
+                    "Error extracting %s at %s!%s: %s",
+                    item.code,
+                    item.sheet_name,
+                    item.cell_ref,
+                    e,
+                )
+                results[item.code] = None
 
-    return results
+        return results
+    finally:
+        close_workbooks(wb_values, wb_formulas)
 
 
 def save_mapping_to_db(

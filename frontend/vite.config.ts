@@ -39,6 +39,7 @@ export default defineConfig(({ mode }) => {
         "/company-models": { ...proxyTarget, timeout: 15000 },
         "/models": { ...proxyTarget, timeout: 15000 },
         "/debug": { ...proxyTarget, timeout: 15000 },
+        "/insights": { ...proxyTarget, timeout: 120000 },
       },
     },
   };

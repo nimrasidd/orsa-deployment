@@ -23,14 +23,29 @@ def _get_company_by_id(conn: Any, company_id: str) -> dict | None:
 
     if isinstance(conn, sqlite3.Connection):
         cur = conn.execute(
-            "select id, name, region_id, country_id from companies where id = ?",
+            """
+            select c.id, c.name, c.region_id, c.country_id,
+                   r.name as region_name, co.name as country_name
+            from companies c
+            left join regions r on r.id = c.region_id
+            left join countries co on co.id = c.country_id
+            where c.id = ?
+            """,
             (company_id,),
         )
         row = cur.fetchone()
         return dict(row) if row else None
     with conn.cursor() as cur:
         cur.execute(
-            "select id::text as id, name, region_id::text as region_id, country_id::text as country_id from public.companies where id = %(id)s::uuid",
+            """
+            select c.id::text as id, c.name, c.region_id::text as region_id,
+                   c.country_id::text as country_id,
+                   r.name as region_name, co.name as country_name
+            from public.companies c
+            left join public.regions r on r.id = c.region_id
+            left join public.countries co on co.id = c.country_id
+            where c.id = %(id)s::uuid
+            """,
             {"id": company_id},
         )
         row = cur.fetchone()
@@ -43,21 +58,57 @@ def _list_companies(conn: Any, region_id: str | None = None) -> list[dict]:
     if isinstance(conn, sqlite3.Connection):
         if region_id:
             cur = conn.execute(
-                "select id, name, region_id, country_id from companies where region_id = ? order by name",
+                """
+                select c.id, c.name, c.region_id, c.country_id,
+                       r.name as region_name, co.name as country_name
+                from companies c
+                left join regions r on r.id = c.region_id
+                left join countries co on co.id = c.country_id
+                where c.region_id = ?
+                order by c.name
+                """,
                 (region_id,),
             )
         else:
-            cur = conn.execute("select id, name, region_id, country_id from companies order by name")
+            cur = conn.execute(
+                """
+                select c.id, c.name, c.region_id, c.country_id,
+                       r.name as region_name, co.name as country_name
+                from companies c
+                left join regions r on r.id = c.region_id
+                left join countries co on co.id = c.country_id
+                order by c.name
+                """
+            )
         return [dict(r) for r in cur.fetchall()]
 
     with conn.cursor() as cur:
         if region_id:
             cur.execute(
-                "select id::text as id, name, region_id::text as region_id, country_id::text as country_id from public.companies where region_id = %(region_id)s::uuid order by name",
+                """
+                select c.id::text as id, c.name, c.region_id::text as region_id,
+                       c.country_id::text as country_id,
+                       r.name as region_name, co.name as country_name
+                from public.companies c
+                left join public.regions r on r.id = c.region_id
+                left join public.countries co on co.id = c.country_id
+                where c.region_id = %(region_id)s::uuid
+                order by c.name
+                """,
                 {"region_id": region_id},
             )
         else:
-            cur.execute("select id::text as id, name, region_id::text as region_id, country_id::text as country_id from public.companies order by name")
+            cur.execute(
+                """
+                select c.id::text as id, c.name, c.region_id::text as region_id,
+                       c.country_id::text as country_id,
+                       r.name as region_name, co.name as country_name
+                from public.companies c
+                left join public.regions r on r.id = c.region_id
+                left join public.countries co on co.id = c.country_id
+                order by c.name
+                """
+            )
         return list(cur.fetchall())
 
 
@@ -113,7 +164,7 @@ def list_companies(
             return []
         row = _get_company_by_id(db, user.company_id)
         return [CompanyOut(**dict(row))] if row else []
-    return _list_companies(db, rid)
+    return [CompanyOut(**r) for r in _list_companies(db, rid)]
 
 
 @router.post("", response_model=CompanyOut)
@@ -149,7 +200,14 @@ def create_company(
                 raise HTTPException(status_code=400, detail="A company with this name already exists in this region") from e
             raise HTTPException(status_code=400, detail=f"Could not create company: {e}") from e
         cur = db.execute(
-            "select id, name, region_id, country_id from companies where id = ?",
+            """
+            select c.id, c.name, c.region_id, c.country_id,
+                   r.name as region_name, co.name as country_name
+            from companies c
+            left join regions r on r.id = c.region_id
+            left join countries co on co.id = c.country_id
+            where c.id = ?
+            """,
             (company_id,),
         )
         row = cur.fetchone()

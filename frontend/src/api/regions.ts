@@ -3,7 +3,28 @@ import { apiFetch } from "./http";
 export type RegionOut = { id: string; name: string };
 export type CountryOut = { id: string; region_id: string; name: string };
 export type ApplicationModelOut = { id: string; country_id: string; name: string };
-export type CompanyOut = { id: string; name: string; region_id: string; country_id?: string | null };
+export type CompanyOut = {
+  id: string;
+  name: string;
+  region_id: string;
+  country_id?: string | null;
+  region_name?: string | null;
+  country_name?: string | null;
+};
+
+/** Display label: "ACME — Pakistan (APAC)" when names are available. */
+export function companyLabel(c: {
+  name: string;
+  country_name?: string | null;
+  region_name?: string | null;
+}): string {
+  if (c.country_name && c.region_name) {
+    return `${c.name} — ${c.country_name} (${c.region_name})`;
+  }
+  if (c.country_name) return `${c.name} — ${c.country_name}`;
+  if (c.region_name) return `${c.name} — ${c.region_name}`;
+  return c.name;
+}
 
 export async function listRegions(): Promise<RegionOut[]> {
   return apiFetch<RegionOut[]>("/regions");

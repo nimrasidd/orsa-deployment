@@ -31,6 +31,8 @@ class CompanyOut(BaseModel):
     name: str
     region_id: str
     country_id: str | None = None
+    region_name: str | None = None
+    country_name: str | None = None
 
 
 class UploadOut(BaseModel):

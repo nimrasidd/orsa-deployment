@@ -3,11 +3,14 @@ import { toast } from "sonner";
 import {
   createCompany,
   deleteCompany,
+  listAllModels,
   listCompanies,
   listCountriesByRegion,
   listRegions,
+  companyLabel,
   type CompanyOut,
   type CountryOut,
+  type ModelOut,
   type RegionOut
 } from "../api/regions";
 import { createSettingsUser, deleteSettingsUser, listSettingsUsers, updateUserCompany, type UserListOut } from "../api/settings";
@@ -41,6 +44,7 @@ export function SettingsPage() {
   const [loading, setLoading] = React.useState(true);
   const [regions, setRegions] = React.useState<RegionOut[]>([]);
   const [companies, setCompanies] = React.useState<CompanyOut[]>([]);
+  const [models, setModels] = React.useState<ModelOut[]>([]);
   const [users, setUsers] = React.useState<UserListOut[]>([]);
 
   const [coName, setCoName] = React.useState("");
@@ -63,11 +67,56 @@ export function SettingsPage() {
   }, [regions]);
 
   async function refresh() {
-    const [r, c, u] = await Promise.all([listRegions(), listCompanies(), listSettingsUsers()]);
+    const [r, c, u, m] = await Promise.all([
+      listRegions(),
+      listCompanies(),
+      listSettingsUsers(),
+      listAllModels().catch(() => [] as ModelOut[]),
+    ]);
     setRegions(Array.isArray(r) ? r : []);
     setCompanies(Array.isArray(c) ? c : []);
     setUsers(Array.isArray(u) ? u : []);
+    setModels(Array.isArray(m) ? m : []);
   }
+
+  /** Flattened rows: each model × companies that share its country. */
+  const modelCompanyCountryRows = React.useMemo(() => {
+    const rows: Array<{
+      key: string;
+      modelName: string;
+      companyName: string;
+      countryName: string;
+      regionName: string;
+    }> = [];
+    for (const model of models) {
+      const cos = companies.filter((c) => c.country_id && String(c.country_id) === String(model.country_id));
+      if (!cos.length) {
+        rows.push({
+          key: `${model.id}-none`,
+          modelName: model.name,
+          companyName: "— (no company in this country)",
+          countryName: model.country_name ?? "—",
+          regionName: model.region_name ?? "—",
+        });
+        continue;
+      }
+      for (const co of cos) {
+        rows.push({
+          key: `${model.id}-${co.id}`,
+          modelName: model.name,
+          companyName: co.name,
+          countryName: model.country_name ?? co.country_name ?? "—",
+          regionName: model.region_name ?? co.region_name ?? "—",
+        });
+      }
+    }
+    rows.sort((a, b) =>
+      a.countryName.localeCompare(b.countryName) ||
+      a.companyName.localeCompare(b.companyName) ||
+      a.modelName.localeCompare(b.modelName)
+    );
+    return rows;
+  }, [models, companies]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -254,7 +303,7 @@ export function SettingsPage() {
         <>
           <Card
             title="Companies"
-            subtitle="Register companies first, then assign users to them."
+            subtitle="Each company is mapped to a region and country. Register companies first, then assign users."
           >
             <form onSubmit={handleCreateCompany} className="mb-5 flex flex-wrap items-end gap-3 rounded-xl border border-line bg-surface-3/50 p-4">
               <div>
@@ -293,23 +342,41 @@ export function SettingsPage() {
               <table className={tableClass}>
                 <thead className={theadClass}>
                   <tr>
-                    <th className={thClass}>Name</th>
+                    <th className={thClass}>Company</th>
                     <th className={thClass}>Region</th>
-                    <th className={thClass}>Country id</th>
+                    <th className={thClass}>Country</th>
+                    <th className={thClass}>Models</th>
                     <th className={thClass}>Actions</th>
                     <th className={`${thClass} font-mono normal-case`}>ID</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {companies.map((c) => (
-                    (() => {
-                      const assignedCount = users.filter((u) => u.company_id === c.id).length;
-                      const canDelete = assignedCount === 0;
-                      return (
+                  {companies.map((c) => {
+                    const assignedCount = users.filter((u) => u.company_id === c.id).length;
+                    const canDelete = assignedCount === 0;
+                    const modelNames = models
+                      .filter((m) => c.country_id && String(m.country_id) === String(c.country_id))
+                      .map((m) => m.name);
+                    return (
                     <tr key={c.id} className={trClass}>
                       <td className={`${tdClass} font-semibold`}>{c.name}</td>
-                      <td className={`${tdClass} text-ink-muted`}>{regionName(c.region_id)}</td>
-                      <td className={`${tdClass} font-mono text-xs text-ink-soft`}>{c.country_id ?? "—"}</td>
+                      <td className={`${tdClass} text-ink`}>
+                        {c.region_name ?? regionName(c.region_id)}
+                      </td>
+                      <td className={`${tdClass} text-ink`}>
+                        {c.country_name ? (
+                          <span className="font-medium">{c.country_name}</span>
+                        ) : (
+                          <span className="text-ink-muted">Not mapped</span>
+                        )}
+                      </td>
+                      <td className={`${tdClass} text-xs text-ink`}>
+                        {modelNames.length ? (
+                          modelNames.join(", ")
+                        ) : (
+                          <span className="text-ink-muted">None for this country</span>
+                        )}
+                      </td>
                       <td className={tdClass}>
                         <Button
                           type="button"
@@ -328,9 +395,44 @@ export function SettingsPage() {
                       </td>
                       <td className={`${tdClass} font-mono text-xs text-ink-soft`}>{c.id}</td>
                     </tr>
-                      );
-                    })()
-                  ))}
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+
+          <Card
+            title="Model · Company · Country"
+            subtitle="Models belong to a country. Companies in that country use those models on upload."
+          >
+            <div className={`max-h-[min(28rem,55vh)] ${tableWrapClass}`}>
+              <table className={tableClass}>
+                <thead className={theadClass}>
+                  <tr>
+                    <th className={thClass}>Model</th>
+                    <th className={thClass}>Company</th>
+                    <th className={thClass}>Country</th>
+                    <th className={thClass}>Region</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {modelCompanyCountryRows.length === 0 ? (
+                    <tr className={trClass}>
+                      <td colSpan={4} className={`${tdClass} text-center text-ink-muted`}>
+                        No models yet. Create models under Mappings → Models, and map companies to a country above.
+                      </td>
+                    </tr>
+                  ) : (
+                    modelCompanyCountryRows.map((row) => (
+                      <tr key={row.key} className={trClass}>
+                        <td className={`${tdClass} font-semibold`}>{row.modelName}</td>
+                        <td className={`${tdClass} text-ink`}>{row.companyName}</td>
+                        <td className={`${tdClass} font-medium text-ink`}>{row.countryName}</td>
+                        <td className={`${tdClass} text-ink-muted`}>{row.regionName}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -367,7 +469,7 @@ export function SettingsPage() {
                 <select value={uCompanyId} onChange={(e) => setUCompanyId(e.target.value)} className={`min-w-[12rem] ${formControlClass}`}>
                   <option value="">Select company</option>
                   {companies.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
+                    <option key={c.id} value={c.id}>{companyLabel(c)}</option>
                   ))}
                 </select>
               </div>
@@ -411,7 +513,7 @@ export function SettingsPage() {
                             <option value={u.company_id}>{u.company_name ?? u.company_id}</option>
                           ) : null}
                           {companies.map((c) => (
-                            <option key={c.id} value={c.id}>{c.name}</option>
+                            <option key={c.id} value={c.id}>{companyLabel(c)}</option>
                           ))}
                         </select>
                       </td>

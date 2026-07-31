@@ -1,7 +1,7 @@
 import * as React from "react";
 import { deleteUpload, listUploads } from "../api/uploads";
 import { ApiError } from "../api/http";
-import { listAllModels, listCompanies, type CompanyOut, type ModelOut } from "../api/regions";
+import { listAllModels, listCompanies, companyLabel, type CompanyOut, type ModelOut } from "../api/regions";
 import { Badge } from "../components/Badge";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
@@ -175,7 +175,7 @@ export function ReportsPage() {
               >
                 {user?.is_admin ? <option value="">All</option> : null}
                 {companies.map((co) => (
-                  <option key={co.id} value={co.id}>{co.name}</option>
+                  <option key={co.id} value={co.id}>{companyLabel(co)}</option>
                 ))}
               </select>
             </div>

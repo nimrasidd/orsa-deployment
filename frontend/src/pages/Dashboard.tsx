@@ -1,7 +1,7 @@
 import * as React from "react";
 import { listUploads } from "../api/uploads";
 import { getChartTable, type ChartTableData, type ChartTableRow, type PeriodGroup } from "../api/reports";
-import { listAllModels, listCompanies, type CompanyOut, type ModelOut } from "../api/regions";
+import { listAllModels, listCompanies, companyLabel, type CompanyOut, type ModelOut } from "../api/regions";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
 import { HierarchyCodeCell } from "../components/HierarchyCodeCell";
@@ -247,10 +247,15 @@ export function Dashboard() {
     return chartTable.years.map(String);
   }, [chartTable]);
 
-  /** Line chart: one series per code at mapping level 1 only. */
+  /** Line chart: prefer mapping level 1; if none, fall back to any rows with numeric values. */
   const levelOneChartRows = React.useMemo(() => {
     if (!chartTable?.rows.length) return [];
-    return chartTable.rows.filter((r) => mappingLevel(r) === 1);
+    const l1 = chartTable.rows.filter((r) => mappingLevel(r) === 1);
+    if (l1.length) return l1;
+    // New / flat mappings often lack dotted level-1 codes — still plot whatever has values.
+    return chartTable.rows.filter((r) =>
+      Object.values(r.values || {}).some((v) => v != null && Number.isFinite(Number(v)))
+    );
   }, [chartTable]);
 
   const lineChartData = React.useMemo(() => {
@@ -278,10 +283,11 @@ export function Dashboard() {
     return withInferredDottedParents(chartTable.rows);
   }, [chartTable]);
 
-  /** Data table: mapping level 2 rows only, optional category filter. */
+  /** Data table: prefer level 2; if none, show all rows with values. */
   const levelTwoChartRows = React.useMemo(() => {
-    return chartHierarchyRows.filter((row) => {
-      if (mappingLevel(row) !== 2) return false;
+    const preferL2 = chartHierarchyRows.filter((row) => mappingLevel(row) === 2);
+    const base = preferL2.length ? preferL2 : chartHierarchyRows;
+    return base.filter((row) => {
       if (tableCategoryFilter) {
         const name = (row.name || "").trim();
         const parent = (row.parent_name || "").trim();
@@ -291,6 +297,10 @@ export function Dashboard() {
       return true;
     });
   }, [chartHierarchyRows, tableCategoryFilter]);
+
+  const usingLevelFallback =
+    Boolean(chartTable?.rows.length) &&
+    !chartTable!.rows.some((r) => mappingLevel(r) === 1);
 
   return (
     <div className="space-y-4">
@@ -327,7 +337,7 @@ export function Dashboard() {
               >
                 {user?.is_admin ? <option value="">All</option> : null}
                 {companies.map((co) => (
-                  <option key={co.id} value={co.id}>{co.name}</option>
+                  <option key={co.id} value={co.id}>{companyLabel(co)}</option>
                 ))}
               </select>
             </div>
@@ -576,17 +586,31 @@ export function Dashboard() {
             <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-ink-muted">
               <p className="font-medium text-ink">No chart data for these filters.</p>
               <p className="max-w-lg text-center text-xs leading-relaxed">
-                Upload with a report date set, and ensure mappings define level 1 (chart) and level 2 (table) codes.
+                Check: (1) Dashboard <span className="font-semibold text-ink">Company</span> and{" "}
+                <span className="font-semibold text-ink">Model</span> match the upload (e.g. Info 6),
+                (2) upload preview showed numbers (not empty cells), (3) the model has an{" "}
+                <span className="font-semibold text-ink">active mapping</span> with correct Sheet + Cell,
+                (4) report year/month was set on upload.
               </p>
             </div>
           )}
         </div>
 
+        {usingLevelFallback && hasLineChartSeries && (
+          <p className="mt-2 text-xs text-amber-800 dark:text-amber-300">
+            Showing all extracted codes because this mapping has no level-1 rows. For a cleaner chart,
+            use dotted codes in the mapping (e.g. <span className="font-mono">1</span>,{" "}
+            <span className="font-mono">1.1</span>).
+          </p>
+        )}
+
         {chartTable && chartTable.rows.length > 0 && (
           <div className="mt-5 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-xs leading-snug text-ink-muted">
-                Table shows <span className="font-semibold text-ink">mapping level 2</span>; chart uses <span className="font-semibold text-ink">level 1</span>.
+                Table prefers <span className="font-semibold text-ink">mapping level 2</span>; chart prefers{" "}
+                <span className="font-semibold text-ink">level 1</span>
+                {usingLevelFallback ? " (fallback: all codes with values)" : ""}.
               </p>
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold text-ink-muted">Category</span>

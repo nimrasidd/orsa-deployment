@@ -53,16 +53,160 @@ def _normalize_cell_value(raw: Any) -> Any:
     return raw
 
 
+# =Sheet1!A1 or ='My Sheet'!A1 or =A1 (optional $)
+_SIMPLE_CELL_FORMULA = re.compile(
+    r"^=(?:'?([^'!]+)'?!)?(\$?[A-Za-z]+\$?\d+)\s*$",
+    re.IGNORECASE,
+)
+
+
+def split_sheet_cell_ref(raw: str) -> tuple[str | None, str]:
+    """
+    Accept 'M65', 'INFO-8!M65', or \"'INFO-8'!M65\" → (sheet_or_None, 'M65').
+    """
+    s = str(raw).strip()
+    if "!" in s:
+        sheet_part, cell_part = s.rsplit("!", 1)
+        sheet_part = sheet_part.strip().strip("'").strip('"')
+        cell_part = cell_part.replace("$", "").strip()
+        return (sheet_part or None), cell_part
+    return None, s.replace("$", "").strip()
+
+
 def get_cell_value(rows: list[list[Any]], cell_ref: str) -> Any:
     """Get cell value from rows (0-based row, col). Returns None if out of range or formula error."""
     try:
-        row_idx, col_idx = _parse_cell_ref(cell_ref)
+        _, bare = split_sheet_cell_ref(cell_ref)
+        row_idx, col_idx = _parse_cell_ref(bare)
         if 0 <= row_idx < len(rows) and 0 <= col_idx < len(rows[row_idx]):
             raw = rows[row_idx][col_idx]
             return _normalize_cell_value(raw)
     except (ValueError, IndexError):
         pass
     return None
+
+
+def _find_worksheet(wb: Any, sheet_name: str) -> Any | None:
+    """Flexible sheet lookup: exact, case-insensitive, ignore spaces/hyphens."""
+    if sheet_name in wb.sheetnames:
+        return wb[sheet_name]
+    want = re.sub(r"[\s\-_]+", "", str(sheet_name).strip().lower())
+    for name in wb.sheetnames:
+        if re.sub(r"[\s\-_]+", "", name.strip().lower()) == want:
+            return wb[name]
+    # prefix match e.g. mapping "INFO-8" vs workbook "INFO-8 (EN)"
+    for name in wb.sheetnames:
+        base = name.split("(")[0].strip()
+        if re.sub(r"[\s\-_]+", "", base.lower()) == want:
+            return wb[name]
+    return None
+
+
+def read_mapped_cell(
+    wb_values: Any,
+    wb_formulas: Any | None,
+    sheet_name: str,
+    cell_ref: str,
+    *,
+    _depth: int = 0,
+) -> tuple[Any, str | None]:
+    """
+    Read one mapped cell for extraction.
+
+    - Prefers cached calculated value (data_only workbook).
+    - If missing, follows simple `=A1` / `=Sheet!A1` formula chains from the formula workbook.
+    - Returns (raw_value, number_format) so callers can scale percentage formats.
+    """
+    if _depth > 12:
+        return None, None
+
+    sheet_from_ref, bare_ref = split_sheet_cell_ref(cell_ref)
+    use_sheet = sheet_from_ref or sheet_name
+    bare_ref = bare_ref.replace("$", "")
+
+    ws_val = _find_worksheet(wb_values, use_sheet)
+    if ws_val is None:
+        return None, None
+
+    try:
+        cell_val = ws_val[bare_ref]
+    except Exception:
+        return None, None
+
+    number_format: str | None = None
+    formula_text: str | None = None
+    if wb_formulas is not None:
+        ws_f = _find_worksheet(wb_formulas, use_sheet)
+        if ws_f is not None:
+            try:
+                cell_f = ws_f[bare_ref]
+                number_format = getattr(cell_f, "number_format", None)
+                fv = cell_f.value
+                if isinstance(fv, str) and fv.startswith("="):
+                    formula_text = fv
+            except Exception:
+                pass
+
+    raw = _normalize_cell_value(cell_val.value)
+    if raw is not None and not (isinstance(raw, str) and raw.startswith("=")):
+        return raw, number_format
+
+    # Cached value missing — follow simple cell references only
+    if formula_text:
+        m = _SIMPLE_CELL_FORMULA.match(formula_text.strip())
+        if m:
+            ref_sheet = m.group(1)
+            next_ref = m.group(2).replace("$", "")
+            next_sheet = (ref_sheet.strip().strip("'") if ref_sheet else use_sheet)
+            return read_mapped_cell(
+                wb_values,
+                wb_formulas,
+                next_sheet,
+                next_ref,
+                _depth=_depth + 1,
+            )
+
+    return None, number_format
+
+
+def open_workbooks_for_extraction(data: bytes) -> tuple[Any | None, Any | None]:
+    """
+    Open value (data_only) + formula workbooks for cell-level extraction.
+    Returns (wb_values, wb_formulas). Either may be None on failure.
+    """
+    wb_values = None
+    wb_formulas = None
+    try:
+        wb_values = openpyxl.load_workbook(
+            io.BytesIO(data),
+            data_only=True,
+            keep_links=False,
+            keep_vba=False,
+        )
+    except Exception as e:
+        logger.warning("data_only workbook open failed: %s", e)
+
+    try:
+        wb_formulas = openpyxl.load_workbook(
+            io.BytesIO(data),
+            data_only=False,
+            keep_links=False,
+            keep_vba=False,
+        )
+    except Exception as e:
+        logger.warning("formula workbook open failed: %s", e)
+
+    return wb_values, wb_formulas
+
+
+def close_workbooks(*workbooks: Any) -> None:
+    for wb in workbooks:
+        if wb is None:
+            continue
+        try:
+            wb.close()
+        except Exception:
+            pass
 
 
 def _load_with_openpyxl(data: bytes, **kwargs) -> list[tuple[str, list[list[Any]]]]:

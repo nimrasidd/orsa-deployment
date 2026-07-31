@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { createUpload, previewUpload, type UploadPreviewItem } from "../api/uploads";
 import { listMappings } from "../api/mappings";
 import type { MappingOut, UploadOut } from "../types";
-import { listAllModels, listCompanies, type CompanyOut, type ModelOut } from "../api/regions";
+import { listAllModels, listCompanies, companyLabel, type CompanyOut, type ModelOut } from "../api/regions";
 import { useAuth } from "../auth/AuthContext";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
@@ -45,7 +45,7 @@ export function UploadPage() {
   const [extractionByModel, setExtractionByModel] = React.useState<Record<string, string>>({});
   const [mappingsByModel, setMappingsByModel] = React.useState<Record<string, MappingOut[]>>({});
 
-  const [companyModels, setCompanyModels] = React.useState<ModelOut[]>([]);
+  const [allModels, setAllModels] = React.useState<ModelOut[]>([]);
   const [reportYear, setReportYear] = React.useState<number | "">(new Date().getFullYear());
   const [reportMonth, setReportMonth] = React.useState<number | "">(new Date().getMonth() + 1);
   /** Only used when exactly one model is selected (optional override). */
@@ -57,9 +57,27 @@ export function UploadPage() {
   const [previewLoading, setPreviewLoading] = React.useState(false);
   const [allCompanies, setAllCompanies] = React.useState<CompanyOut[]>([]);
   const [uploadCompanyId, setUploadCompanyId] = React.useState("");
+  const [resolvingModels, setResolvingModels] = React.useState(false);
 
   const multiModel = selectedModelIds.length > 1;
   const singleModelId = selectedModelIds.length === 1 ? selectedModelIds[0] : "";
+
+  const effectiveCompanyId =
+    (user?.is_admin ? uploadCompanyId : user?.company_id) || "";
+
+  const selectedCompany = React.useMemo(
+    () => allCompanies.find((c) => c.id === effectiveCompanyId) ?? null,
+    [allCompanies, effectiveCompanyId]
+  );
+
+  /** Models belonging to the selected company's country. */
+  const modelsForCompany = React.useMemo(() => {
+    const cid = selectedCompany?.country_id;
+    if (!cid) return [] as ModelOut[];
+    return allModels.filter((m) => String(m.country_id) === String(cid));
+  }, [allModels, selectedCompany?.country_id]);
+
+  const modelsForCompanyKey = modelsForCompany.map((m) => m.id).join("|");
 
   React.useEffect(() => {
     listCompanies()
@@ -79,97 +97,90 @@ export function UploadPage() {
   React.useEffect(() => {
     if (!user) return;
     let cancelled = false;
-    const run = async () => {
-      try {
-        const data = await listAllModels();
-        if (cancelled) return;
-        const arr = Array.isArray(data) ? data : [];
-        setCompanyModels(arr);
-        setSelectedModelIds((prev) => prev.filter((id) => arr.some((m) => m.id === id)));
-      } catch {
-        if (!cancelled) {
-          setCompanyModels([]);
-          setSelectedModelIds([]);
-        }
-      }
-    };
-    void run();
+    listAllModels()
+      .then((data) => {
+        if (!cancelled) setAllModels(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {
+        if (!cancelled) setAllModels([]);
+      });
     return () => {
       cancelled = true;
     };
   }, [user?.id]);
 
-  // Load mappings for each selected model; default extraction to active mapping.
+  // Auto-select every model for this company's country that has a saved mapping.
   React.useEffect(() => {
     let cancelled = false;
-    const ids = [...selectedModelIds];
-    if (!ids.length) {
+    if (!effectiveCompanyId || !selectedCompany?.country_id) {
+      setSelectedModelIds([]);
       setMappingsByModel({});
       setExtractionByModel({});
+      setResolvingModels(false);
+      return;
+    }
+    const models = modelsForCompany;
+    if (!models.length) {
+      setSelectedModelIds([]);
+      setMappingsByModel({});
+      setExtractionByModel({});
+      setResolvingModels(false);
       return;
     }
 
+    setResolvingModels(true);
     void (async () => {
       const nextMaps: Record<string, MappingOut[]> = {};
       const nextExtract: Record<string, string> = {};
+      const autoIds: string[] = [];
       await Promise.all(
-        ids.map(async (mid) => {
+        models.map(async (m) => {
           try {
-            const rows = await listMappings(mid);
+            const rows = await listMappings(m.id);
             const arr = Array.isArray(rows) ? rows : [];
-            nextMaps[mid] = arr;
-            const active = arr.find((m) => m.is_active);
-            nextExtract[mid] = active?.id ?? arr[0]?.id ?? "manual";
+            nextMaps[m.id] = arr;
+            const active = arr.find((x) => x.is_active);
+            const pick = active?.id ?? arr[0]?.id;
+            if (pick) {
+              nextExtract[m.id] = pick;
+              autoIds.push(m.id);
+            } else {
+              nextExtract[m.id] = "manual";
+            }
           } catch {
-            nextMaps[mid] = [];
-            nextExtract[mid] = "manual";
+            nextMaps[m.id] = [];
+            nextExtract[m.id] = "manual";
           }
         })
       );
       if (cancelled) return;
       setMappingsByModel(nextMaps);
-      setExtractionByModel((prev) => {
-        const merged: Record<string, string> = {};
-        for (const mid of ids) {
-          const kept = prev[mid];
-          const options = nextMaps[mid] ?? [];
-          if (kept && (kept === "manual" || options.some((m) => m.id === kept))) {
-            merged[mid] = kept;
-          } else {
-            merged[mid] = nextExtract[mid];
-          }
-        }
-        return merged;
-      });
+      setExtractionByModel(nextExtract);
+      setSelectedModelIds(autoIds);
+      setResolvingModels(false);
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [selectedModelIds.join("|")]);
+  }, [effectiveCompanyId, selectedCompany?.country_id, modelsForCompanyKey]);
 
   const derivedKeysByModel = React.useMemo(() => {
     const out: Record<string, string> = {};
     if (!reportYear || !reportMonth) return out;
     for (const mid of selectedModelIds) {
-      const m = companyModels.find((x) => x.id === mid);
+      const m = allModels.find((x) => x.id === mid);
       if (!m) continue;
       out[mid] = `${m.name}-${reportYear}-${String(reportMonth).padStart(2, "0")}`;
     }
     return out;
-  }, [selectedModelIds, reportYear, reportMonth, companyModels]);
+  }, [selectedModelIds, reportYear, reportMonth, allModels]);
 
   React.useEffect(() => {
     if (singleModelId && derivedKeysByModel[singleModelId]) {
       setCustomReportKey(derivedKeysByModel[singleModelId]);
     }
   }, [singleModelId, derivedKeysByModel]);
-
-  function toggleModel(id: string) {
-    setSelectedModelIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
-  }
 
   const dz = useDropzone({
     accept: {
@@ -269,7 +280,7 @@ export function UploadPage() {
       return;
     }
     if (!selectedModelIds.length) {
-      toast.error("Select at least one model (e.g. SCR, FS6).");
+      toast.error("No models selected. Map this company to a country and add model mappings.");
       return;
     }
     if (reportYear === "" || reportMonth === "") {
@@ -290,7 +301,7 @@ export function UploadPage() {
       });
       if (missing.length) {
         const names = missing
-          .map((id) => companyModels.find((m) => m.id === id)?.name ?? id)
+          .map((id) => allModels.find((m) => m.id === id)?.name ?? id)
           .join(", ");
         toast.error("Each selected model needs a saved mapping", {
           description: `Add/activate a mapping for: ${names}`
@@ -304,7 +315,7 @@ export function UploadPage() {
     const errors: string[] = [];
     try {
       for (const mid of selectedModelIds) {
-        const model = companyModels.find((m) => m.id === mid);
+        const model = allModels.find((m) => m.id === mid);
         const mode = extractionByModel[mid] ?? "manual";
         const useCell = mode !== "manual";
         const reportKey =
@@ -363,13 +374,11 @@ export function UploadPage() {
     }
   }
 
-  const subtitle = !selectedModelIds.length
-    ? "Use an Excel .xlsx workbook. Select one or more models — each model reads Sheet + Cell from its own mapping (e.g. SCR and FS6)."
-    : multiModel
-      ? `Extracting ${selectedModelIds.length} models from one workbook. Each model uses its own mapping (sheet/cell references).`
-      : extractionByModel[singleModelId] && extractionByModel[singleModelId] !== "manual"
-        ? "Extraction uses the mapping below: each code is read from its Sheet + Cell in your workbook."
-        : "Manual: the workbook must include Code, Description, Value columns (no cell mapping).";
+  const subtitle = !effectiveCompanyId
+    ? "Select a company. All models mapped to that company's country extract automatically from one Excel file."
+    : !selectedModelIds.length
+      ? "No models with mappings for this company's country yet. Add them under Mappings."
+      : `Will auto-extract ${selectedModelIds.length} model${selectedModelIds.length === 1 ? "" : "s"} for ${selectedCompany?.country_name ?? "this country"} from one workbook.`;
 
   return (
     <>
@@ -411,18 +420,21 @@ export function UploadPage() {
                 >
                   <option value="">Select company</option>
                   {allCompanies.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
+                    <option key={c.id} value={c.id}>{companyLabel(c)}</option>
                   ))}
                 </select>
                 <div className="mt-1 text-xs text-ink-muted">
-                  Upload is stored under this company. Region and country on the report come from this
-                  company&apos;s mapping in Settings → Companies (no separate country step).
+                  Models/mappings for this company&apos;s country are auto-selected below.
                 </div>
               </div>
             ) : user?.company_name ? (
               <div className="space-y-1 rounded-xl bg-surface-2 px-4 py-2 text-sm text-ink">
                 <div>
-                  <span className="text-ink-muted">Company:</span> {user.company_name}
+                  <span className="text-ink-muted">Company:</span>{" "}
+                  {(() => {
+                    const co = allCompanies.find((c) => c.id === user.company_id);
+                    return co ? companyLabel(co) : user.company_name;
+                  })()}
                 </div>
                 <div className="text-xs text-ink-muted">
                   Region and country for this upload follow your company&apos;s Settings mapping.
@@ -432,92 +444,61 @@ export function UploadPage() {
 
             <div>
               <div className="mb-2 text-xs font-medium text-ink">
-                Models <span className="font-normal text-ink-muted">(select one or more)</span>
+                Auto-extract models
+                {selectedCompany?.country_name ? (
+                  <span className="font-normal text-ink-muted"> · {selectedCompany.country_name}</span>
+                ) : null}
               </div>
               <div className="max-h-48 space-y-1 overflow-auto rounded-xl bg-surface-2 p-2 ring-1 ring-line">
-                {companyModels.length === 0 ? (
-                  <div className="px-2 py-3 text-xs text-ink-muted">No models available.</div>
+                {resolvingModels ? (
+                  <div className="px-2 py-3 text-xs text-ink-muted">Loading mappings for this company…</div>
+                ) : !effectiveCompanyId ? (
+                  <div className="px-2 py-3 text-xs text-ink-muted">Select a company first.</div>
+                ) : !selectedCompany?.country_id ? (
+                  <div className="px-2 py-3 text-xs text-amber-700 dark:text-amber-300">
+                    This company has no country mapped. Set country in Settings → Companies.
+                  </div>
+                ) : selectedModelIds.length === 0 ? (
+                  <div className="px-2 py-3 text-xs text-ink-muted">
+                    No models with mappings for {selectedCompany.country_name ?? "this country"}. Add models +
+                    mappings under{" "}
+                    <Link to="/mappings" className="text-brand-700 hover:underline dark:text-brand-300">
+                      Mappings
+                    </Link>
+                    .
+                  </div>
                 ) : (
-                  companyModels.map((m) => {
-                    const checked = selectedModelIds.includes(m.id);
+                  selectedModelIds.map((mid) => {
+                    const m = allModels.find((x) => x.id === mid);
+                    const maps = mappingsByModel[mid] ?? [];
+                    const active = maps.find((x) => x.is_active) ?? maps[0];
                     return (
-                      <label
-                        key={m.id}
-                        className={cn(
-                          "flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-sm transition",
-                          checked ? "bg-brand-500/15 text-ink" : "text-ink hover:bg-surface-2"
-                        )}
+                      <div
+                        key={mid}
+                        className="flex items-center justify-between gap-3 rounded-lg bg-brand-500/10 px-3 py-2 text-sm text-ink"
                       >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleModel(m.id)}
-                          className="h-4 w-4 rounded border-white/20 bg-surface-2 text-brand-500 focus:ring-brand-400/60"
-                        />
-                        <span className="font-medium">{m.name}</span>
-                      </label>
+                        <div className="min-w-0">
+                          <div className="font-medium">{m?.name ?? mid}</div>
+                          <div className="truncate text-[11px] text-ink-muted">
+                            {active
+                              ? `${active.name} (v${active.version})${active.is_active ? " · active" : ""}`
+                              : "No mapping"}
+                            {m?.country_name ? ` · ${m.country_name}` : ""}
+                          </div>
+                        </div>
+                        <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-brand-800 dark:text-brand-300">
+                          Will extract
+                        </span>
+                      </div>
                     );
                   })
                 )}
               </div>
               <div className="mt-2 text-xs text-ink-muted">
-                Example: select <span className="text-ink">SCR</span> and{" "}
-                <span className="text-ink">FS6</span> — one workbook, SCR values from SCR mapping
-                cells, FS6 values from FS6 mapping cells.{" "}
-                {user?.is_admin ? (
-                  <>
-                    Manage models under{" "}
-                    <Link to="/mappings" className="text-brand-400 hover:text-brand-300">
-                      Mappings → Models
-                    </Link>
-                    .
-                  </>
-                ) : (
-                  "If none appear, ask your administrator."
-                )}
+                All models mapped to this company&apos;s country are extracted automatically from one Excel
+                file — no selection needed.
               </div>
             </div>
-
-            {selectedModelIds.map((mid) => {
-              const model = companyModels.find((m) => m.id === mid);
-              const maps = mappingsByModel[mid] ?? [];
-              const mode = extractionByModel[mid] ?? "manual";
-              return (
-                <div key={mid} className="rounded-xl border border-line bg-surface-2 p-3">
-                  <div className="mb-2 text-xs font-medium text-ink">
-                    Mapping for {model?.name ?? "model"}
-                  </div>
-                  <select
-                    value={mode}
-                    onChange={(e) =>
-                      setExtractionByModel((prev) => ({ ...prev, [mid]: e.target.value }))
-                    }
-                    className="h-11 w-full rounded-xl bg-surface-2 px-4 text-sm text-ink ring-1 ring-line focus:outline-none focus:ring-2 focus:ring-brand-400/60"
-                  >
-                    {!multiModel && (
-                      <option value="manual">
-                        Manual — file has Code, Description, Value columns
-                      </option>
-                    )}
-                    {maps.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.name} (v{m.version}){m.is_active ? " • active" : ""} — Code → Sheet, Cell
-                      </option>
-                    ))}
-                  </select>
-                  {maps.length === 0 && (
-                    <div className="mt-2 text-xs text-amber-300/90">
-                      No saved mapping for this model. Upload one under Mappings first.
-                    </div>
-                  )}
-                  {derivedKeysByModel[mid] && (
-                    <div className="mt-2 text-xs text-ink-muted">
-                      Report key: <span className="font-mono text-ink-muted">{derivedKeysByModel[mid]}</span>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
 
             <div>
               <div className="mb-2 text-xs font-medium text-ink">Report date</div>
@@ -609,10 +590,10 @@ export function UploadPage() {
             </div>
 
             <div className="flex flex-wrap gap-3">
-              <Button onClick={onSubmit} disabled={submitting}>
+              <Button onClick={onSubmit} disabled={submitting || resolvingModels || !selectedModelIds.length}>
                 {submitting
                   ? "Uploading…"
-                  : multiModel
+                  : selectedModelIds.length > 1
                     ? `Create ${selectedModelIds.length} uploads`
                     : "Create upload"}
               </Button>
@@ -633,7 +614,7 @@ export function UploadPage() {
                 {Object.keys(previewByModel).length > 1 && (
                   <div className="mb-3 flex flex-wrap gap-2">
                     {Object.keys(previewByModel).map((mid) => {
-                      const name = companyModels.find((m) => m.id === mid)?.name ?? mid;
+                      const name = allModels.find((m) => m.id === mid)?.name ?? mid;
                       const active = previewModelTab === mid;
                       return (
                         <button

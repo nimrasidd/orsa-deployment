@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import Any
@@ -61,14 +62,21 @@ def _norm_code(raw: Any) -> str:
 
 
 def _to_decimal(raw: Any) -> Decimal | None:
+    """Parse numeric Excel values, including percentage text like '145.2%'."""
     if raw is None or raw == "":
         return None
     if isinstance(raw, Decimal):
         return raw
+    if isinstance(raw, bool):
+        return None
     if isinstance(raw, (int, float)):
         return Decimal(str(raw))
     try:
-        return Decimal(str(raw).replace(",", "").strip())
+        s = str(raw).strip().replace("\u00a0", " ").replace(",", "")
+        s = re.sub(r"\s+", "", s)
+        if s.endswith("%"):
+            s = s[:-1]
+        return Decimal(s) if s else None
     except (InvalidOperation, ValueError):
         return None
 

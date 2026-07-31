@@ -9,7 +9,7 @@ import {
   getMappingItems,
   listMappings
 } from "../api/mappings";
-import { createModel, deleteModel, listAllModels, listAllCountries, type CountryOut, type ModelOut } from "../api/regions";
+import { createModel, deleteModel, listAllModels, listAllCountries, listCompanies, type CompanyOut, type CountryOut, type ModelOut } from "../api/regions";
 import { useAuth } from "../auth/AuthContext";
 import { Badge } from "../components/Badge";
 import { Button } from "../components/Button";
@@ -65,6 +65,7 @@ export function MappingsPage() {
   const [newModelName, setNewModelName] = React.useState("");
   const [newModelCountryId, setNewModelCountryId] = React.useState("");
   const [countries, setCountries] = React.useState<CountryOut[]>([]);
+  const [companies, setCompanies] = React.useState<CompanyOut[]>([]);
   const [creatingModel, setCreatingModel] = React.useState(false);
   const [deletingModelId, setDeletingModelId] = React.useState<string | null>(null);
   const [mappingDownloadId, setMappingDownloadId] = React.useState<string | null>(null);
@@ -114,7 +115,23 @@ export function MappingsPage() {
         setNewModelCountryId((prev) => (prev && arr.some((c) => c.id === prev) ? prev : ""));
       })
       .catch(() => setCountries([]));
+    listCompanies()
+      .then((data) => setCompanies(Array.isArray(data) ? data : []))
+      .catch(() => setCompanies([]));
   }, [user?.id]);
+
+  const companiesByCountry = React.useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const c of companies) {
+      if (!c.country_id) continue;
+      const key = String(c.country_id);
+      const list = map.get(key) ?? [];
+      list.push(c.name);
+      map.set(key, list);
+    }
+    for (const [k, list] of map) map.set(k, list.sort((a, b) => a.localeCompare(b)));
+    return map;
+  }, [companies]);
 
   React.useEffect(() => {
     if (!user) return;
@@ -412,7 +429,7 @@ export function MappingsPage() {
       {tab === "models" && (
         <Card
           title="Models"
-          subtitle="Each model is tied to a country. Models are shared across companies."
+          subtitle="Each model is tied to a country. Companies mapped to that country use the model on upload."
         >
           <div className="space-y-4">
             <div className="flex flex-wrap items-end gap-3">
@@ -474,15 +491,18 @@ export function MappingsPage() {
                   <table className={tableClass}>
                     <thead className={theadClass}>
                       <tr>
-                        <th className={thClass}>Model name</th>
+                        <th className={thClass}>Model</th>
                         <th className={thClass}>Country</th>
+                        <th className={thClass}>Companies</th>
                         <th className={thClass}>Created</th>
                         <th className={thClass}>Created by</th>
                         <th className={`${thClass} text-right`}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {companyModels.map((m) => (
+                      {companyModels.map((m) => {
+                        const cos = companiesByCountry.get(String(m.country_id)) ?? [];
+                        return (
                         <tr
                           key={m.id}
                           className={cn(
@@ -491,8 +511,16 @@ export function MappingsPage() {
                           )}
                         >
                           <td className={`${tdClass} font-semibold`}>{m.name}</td>
-                          <td className={`${tdClass} text-xs text-ink-muted`}>
+                          <td className={`${tdClass} text-xs font-medium text-ink`}>
                             {m.country_name ?? "—"}
+                            {m.region_name ? (
+                              <span className="text-ink-muted"> · {m.region_name}</span>
+                            ) : null}
+                          </td>
+                          <td className={`${tdClass} text-xs text-ink`}>
+                            {cos.length ? cos.join(", ") : (
+                              <span className="text-ink-muted">No company in this country</span>
+                            )}
                           </td>
                           <td className={`${tdClass} text-xs text-ink-muted`}>
                             {m.created_at ? formatDate(m.created_at) : "—"}
@@ -527,7 +555,8 @@ export function MappingsPage() {
                             </div>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 )}
