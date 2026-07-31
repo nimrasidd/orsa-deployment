@@ -19,8 +19,8 @@ export function Card({ className, title, subtitle, actions, children, ...props }
       {(title || subtitle || actions) && (
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-line pb-3">
           <div className="min-w-0">
-            {title && <div className="font-display text-sm font-semibold text-ink">{title}</div>}
-            {subtitle && <div className="mt-0.5 text-[13px] leading-relaxed text-ink/80">{subtitle}</div>}
+            {title && <div className="font-display text-sm font-bold tracking-tight text-heading">{title}</div>}
+            {subtitle && <div className="mt-0.5 text-[13px] leading-relaxed text-ink-muted">{subtitle}</div>}
           </div>
           {actions && <div className="shrink-0">{actions}</div>}
         </div>

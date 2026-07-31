@@ -12,7 +12,7 @@ export function Segmented<T extends string>({
   items: Segment<T>[];
 }) {
   return (
-    <div className="inline-flex rounded-lg border border-line bg-surface-3 p-0.5 shadow-sm">
+    <div className="inline-flex gap-0.5 rounded-[10px] border border-line bg-surface p-0.5 shadow-sm dark:bg-surface-3">
       {items.map((it) => {
         const active = it.value === value;
         return (
@@ -21,10 +21,10 @@ export function Segmented<T extends string>({
             type="button"
             onClick={() => onChange(it.value)}
             className={cn(
-              "h-8 rounded-md px-3 text-[12px] font-semibold transition",
+              "h-8 rounded-lg px-3 text-[12px] font-semibold transition",
               active
-                ? "bg-brand-700 text-white shadow-sm dark:bg-brand-500 dark:text-slate-950"
-                : "text-ink-muted hover:bg-surface-2 hover:text-ink"
+                ? "bg-surface-panel text-heading shadow-sm dark:bg-brand-900 dark:text-white"
+                : "text-ink-muted hover:text-ink"
             )}
           >
             {it.label}

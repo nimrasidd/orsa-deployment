@@ -5,18 +5,19 @@
 :root,
 html.light {
   color-scheme: light;
-  /* Stronger contrast — muted/soft were too washed out on pale green surfaces */
-  --ink: 15 23 42;
-  --ink-muted: 51 65 85;
-  --ink-soft: 71 85 105;
-  --surface: 236 242 238;
-  --surface-2: 248 252 249;
-  --surface-3: 226 235 229;
-  --surface-panel: 248 252 249;
-  --line: 180 198 186;
-  --page-dot: rgba(6, 78, 40, 0.07);
-  --page-glow-a: rgba(8, 80, 40, 0.12);
-  --page-glow-b: rgba(6, 60, 32, 0.1);
+  /* SHMA mock palette — near-black body text, deep green headings */
+  --ink: 18 32 25; /* #122019 */
+  --ink-muted: 45 58 50; /* darker than before — readable labels */
+  --ink-soft: 70 85 78;
+  --heading: 11 77 54; /* #0B4D36 mock green-900 */
+  --surface: 245 250 247; /* #F5FAF7 */
+  --surface-2: 255 255 255;
+  --surface-3: 228 245 236; /* #E4F5EC */
+  --surface-panel: 255 255 255;
+  --line: 225 233 228; /* #E1E9E4 */
+  --page-dot: rgba(11, 77, 54, 0.06);
+  --page-glow-a: rgba(11, 77, 54, 0.1);
+  --page-glow-b: rgba(31, 169, 122, 0.08);
 }
 
 html.dark {
@@ -24,6 +25,7 @@ html.dark {
   --ink: 241 245 249;
   --ink-muted: 203 213 225;
   --ink-soft: 148 163 184;
+  --heading: 167 243 208; /* brand-200 for dark headings */
   --surface: 1 4 12;
   --surface-2: 8 14 24;
   --surface-3: 18 28 40;

@@ -368,7 +368,7 @@ export function InsightsPage() {
       {/* Topline */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="font-display text-2xl font-bold tracking-tight text-ink">
+          <h1 className="font-display text-2xl font-bold tracking-tight text-heading">
             Solvency Overview
           </h1>
           <p className="mt-1 text-[13.5px] text-ink-muted">
@@ -496,7 +496,7 @@ export function InsightsPage() {
                 <Sparkles className="h-4 w-4" />
               </div>
               <div>
-                <div className="text-[14.5px] font-bold text-ink">
+                <div className="text-[14.5px] font-bold text-heading">
                   AI Analysis{data.reporting_period ? ` — ${data.reporting_period}` : ""}
                 </div>
                 <div className="text-[11.5px] text-ink-soft">
@@ -557,7 +557,7 @@ export function InsightsPage() {
           {/* KRI + Top movers */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.1fr_0.9fr]">
             <div className="rounded-2xl border border-line bg-surface-panel p-5 shadow-sm dark:bg-surface-2/90">
-              <div className="mb-0.5 flex items-center gap-2 text-[13.5px] font-bold text-ink">
+              <div className="mb-0.5 flex items-center gap-2 text-[13.5px] font-bold text-heading">
                 <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                 Key Risk Indicators
               </div>
@@ -598,7 +598,7 @@ export function InsightsPage() {
             </div>
 
             <div className="rounded-2xl border border-line bg-surface-panel p-5 shadow-sm dark:bg-surface-2/90">
-              <div className="mb-0.5 text-[13.5px] font-bold text-ink">Top Movers</div>
+              <div className="mb-0.5 text-[13.5px] font-bold text-heading">Top Movers</div>
               <p className="mb-3.5 text-[11.5px] text-ink-soft">Largest changes in risk sub-categories</p>
               {data.top_movers.length ? (
                 <div className="space-y-2.5">
